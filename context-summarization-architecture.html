@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Context Summarization Pipeline Architecture</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #21262d;
+  --bg-card: #1c2128;
+  --border: #30363d;
+  --border-subtle: #21262d;
+  --text-1: #e6edf3;
+  --text-2: #8b949e;
+  --text-3: #484f58;
+  --blue: #58a6ff;
+  --blue-bg: rgba(31,111,235,0.1);
+  --purple: #a371f7;
+  --purple-bg: rgba(163,113,247,0.1);
+  --green: #3fb950;
+  --green-bg: rgba(35,134,54,0.1);
+  --yellow: #e3b341;
+  --yellow-bg: rgba(227,179,65,0.1);
+  --red: #f85149;
+  --red-bg: rgba(218,54,51,0.1);
+  --orange: #f78166;
+  --orange-bg: rgba(247,129,102,0.08);
+  --zone-c: #da3633;
+  --zone-b: #6e40c9;
+  --zone-a: #238636;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-1);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+.page { max-width: 1440px; margin: 0 auto; padding: 32px 28px 60px; }
+
+/* ─────────────── HEADER ─────────────── */
+.header { margin-bottom: 36px; }
+.header-eyebrow {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--blue-bg); border: 1px solid rgba(88,166,255,0.25);
+  color: var(--blue); padding: 4px 12px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; margin-bottom: 14px;
+}
+.header h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; }
+.header p { color: var(--text-2); font-size: 14px; max-width: 680px; }
+.badges { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.badge {
+  padding: 3px 10px; border-radius: 5px; font-size: 11px; font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+}
+.b-py  { background: rgba(55,118,171,0.15); border: 1px solid rgba(55,118,171,0.4); color: #79c0ff; }
+.b-oai { background: rgba(16,163,127,0.1);  border: 1px solid rgba(16,163,127,0.35); color: #56d364; }
+.b-ant { background: rgba(163,113,247,0.1); border: 1px solid rgba(163,113,247,0.3); color: #c9a9f5; }
+.b-gg  { background: rgba(227,179,65,0.1);  border: 1px solid rgba(227,179,65,0.3);  color: #e3b341; }
+.b-oss { background: rgba(88,166,255,0.08); border: 1px solid rgba(88,166,255,0.25); color: #58a6ff; }
+
+/* ─────────────── LAYOUT ─────────────── */
+.two-col { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
+
+/* ─────────────── SECTION ─────────────── */
+.section {
+  background: var(--bg-secondary); border: 1px solid var(--border);
+  border-radius: 12px; padding: 22px; margin-bottom: 20px;
+}
+.section-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-2); margin-bottom: 18px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title::before {
+  content: ''; display: inline-block; width: 3px; height: 13px;
+  background: var(--blue); border-radius: 2px;
+}
+
+/* ─────────────── FLOW NODES ─────────────── */
+.pipeline { display: flex; flex-direction: column; align-items: center; }
+
+.flow-node {
+  width: 100%; max-width: 820px; background: var(--bg-tertiary);
+  border: 1.5px solid var(--border); border-radius: 10px;
+  padding: 14px 18px; cursor: pointer; transition: all 0.18s ease; position: relative;
+}
+.flow-node:hover { border-color: var(--blue); transform: translateX(3px); box-shadow: -3px 0 0 var(--blue), 0 4px 24px rgba(88,166,255,0.08); }
+.flow-node.decision { border-style: dashed; border-color: var(--yellow); background: rgba(227,179,65,0.04); }
+.flow-node.decision:hover { box-shadow: -3px 0 0 var(--yellow), 0 4px 24px rgba(227,179,65,0.08); }
+.flow-inner { display: flex; align-items: center; gap: 12px; }
+.flow-icon {
+  width: 38px; height: 38px; border-radius: 9px; display: flex;
+  align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0;
+}
+.flow-name { font-size: 14px; font-weight: 600; }
+.flow-desc { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.flow-pill {
+  margin-left: auto; padding: 2px 9px; border-radius: 5px;
+  font-size: 10px; font-weight: 600; flex-shrink: 0; white-space: nowrap;
+}
+
+.arrow {
+  display: flex; justify-content: center; align-items: center;
+  height: 30px; width: 100%; max-width: 820px; position: relative;
+}
+.arrow::before {
+  content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 1.5px; background: linear-gradient(to bottom, var(--border), rgba(88,166,255,0.5));
+}
+.arrow::after {
+  content: '▼'; color: var(--blue); font-size: 11px; position: relative;
+  z-index: 1; background: var(--bg-primary); padding: 0 5px;
+}
+
+/* Branch */
+.branch { display: flex; gap: 20px; width: 100%; max-width: 820px; align-items: flex-start; }
+.branch-path { flex: 1; display: flex; flex-direction: column; align-items: center; }
+.branch-label {
+  font-size: 10px; font-weight: 700; padding: 3px 10px;
+  border-radius: 4px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.lbl-ok    { background: rgba(35,134,54,0.12); color: var(--green); border: 1px solid var(--zone-a); }
+.lbl-hit   { background: rgba(218,54,51,0.1);  color: var(--red);   border: 1px solid var(--zone-c); }
+
+/* Compaction box */
+.compact-box {
+  width: 100%; background: rgba(247,129,102,0.04);
+  border: 1.5px dashed var(--orange); border-radius: 10px; padding: 16px;
+  cursor: pointer; transition: all 0.18s;
+}
+.compact-box:hover { background: rgba(247,129,102,0.08); box-shadow: 0 4px 24px rgba(247,129,102,0.08); }
+.compact-title {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--orange); font-weight: 700; margin-bottom: 12px;
+}
+.compact-steps { display: flex; gap: 6px; align-items: center; }
+.compact-step {
+  flex: 1; background: var(--bg-tertiary); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 8px; text-align: center;
+  cursor: pointer; transition: all 0.15s; min-width: 80px;
+}
+.compact-step:hover { border-color: var(--orange); background: rgba(247,129,102,0.06); }
+.cs-icon { font-size: 16px; display: block; margin-bottom: 3px; }
+.cs-name { font-size: 10px; font-weight: 700; color: var(--text-1); }
+.cs-desc { font-size: 9px; color: var(--text-2); margin-top: 2px; }
+.compact-arrow { color: var(--text-3); font-size: 12px; flex-shrink: 0; }
+
+/* ─────────────── ZONES ─────────────── */
+.zone-wrap { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.zone-row { display: flex; height: 72px; }
+.zone {
+  display: flex; flex-direction: column; justify-content: center;
+  align-items: center; padding: 10px 12px; cursor: pointer; transition: filter 0.15s;
+  position: relative;
+}
+.zone:hover { filter: brightness(1.25); }
+.zone-c-seg { flex: 3; background: rgba(218,54,51,0.1); border-right: 2px solid var(--zone-c); }
+.zone-b-seg { flex: 2.5; background: rgba(110,64,201,0.1); border-right: 2px solid var(--zone-b); }
+.zone-a-seg { flex: 2; background: rgba(35,134,54,0.1); }
+.zone-name { font-size: 12px; font-weight: 700; }
+.zone-sub { font-size: 10px; color: var(--text-2); text-align: center; line-height: 1.4; margin-top: 3px; }
+
+.zone-bar { display: flex; padding: 10px 0 8px; gap: 0; }
+.zone-seg-bar { display: flex; gap: 3px; padding: 0 10px; }
+.msg-blk { height: 14px; border-radius: 3px; flex: 1; min-width: 14px; }
+
+.zone-labels { display: flex; font-size: 10px; color: var(--text-3); }
+.zone-labels > div { padding: 0 10px 8px; text-align: center; }
+
+/* ─────────────── MODEL REGISTRY ─────────────── */
+.provider-card {
+  background: var(--bg-tertiary); border: 1px solid var(--border);
+  border-radius: 9px; padding: 14px; margin-bottom: 12px;
+}
+.prov-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.prov-icon { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+.prov-name { font-size: 13px; font-weight: 700; }
+.model-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 8px; background: var(--bg-secondary); border-radius: 6px;
+  margin-bottom: 4px; font-size: 11px;
+}
+.m-name { font-family: 'JetBrains Mono', monospace; color: var(--blue); flex: 1; }
+.m-ctx { color: var(--text-2); flex-shrink: 0; }
+.m-tag { padding: 1px 6px; border-radius: 3px; font-size: 9px; font-weight: 700; flex-shrink: 0; }
+.t-prim { background: rgba(88,166,255,0.1); color: var(--blue); border: 1px solid rgba(88,166,255,0.25); }
+.t-comp { background: rgba(247,129,102,0.12); color: var(--orange); border: 1px solid rgba(247,129,102,0.3); }
+
+/* ─────────────── TRIGGER CARDS ─────────────── */
+.trigger-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+@media (max-width: 900px) { .trigger-grid { grid-template-columns: 1fr; } }
+.trigger-card {
+  background: var(--bg-tertiary); border: 1px solid var(--border);
+  border-radius: 9px; padding: 16px; cursor: pointer; transition: all 0.15s;
+}
+.trigger-card:hover { border-color: var(--yellow); box-shadow: 0 4px 16px rgba(227,179,65,0.06); }
+.trig-icon { font-size: 22px; margin-bottom: 10px; }
+.trig-name { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+.trig-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+
+/* ─────────────── IMPROVEMENTS ─────────────── */
+.improvements-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.imp-card {
+  background: var(--bg-tertiary); border: 1px solid var(--border);
+  border-left: 3px solid; border-radius: 9px; padding: 15px;
+}
+.imp-name { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.imp-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.imp-tag {
+  display: inline-block; margin-top: 9px; font-size: 9px; font-weight: 700;
+  padding: 2px 7px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.05em;
+}
+
+/* ─────────────── CODE SNIPPET ─────────────── */
+.code-block {
+  background: var(--bg-primary); border: 1px solid var(--border);
+  border-radius: 7px; padding: 12px; font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: #79c0ff; line-height: 1.65; white-space: pre;
+  overflow-x: auto; tab-size: 2;
+}
+
+/* ─────────────── DETAIL SLIDE PANEL ─────────────── */
+#panel {
+  position: fixed; right: 0; top: 0; bottom: 0; width: 380px;
+  background: var(--bg-secondary); border-left: 1px solid var(--border);
+  padding: 28px 24px; transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.22,1,0.36,1);
+  z-index: 200; overflow-y: auto;
+}
+#panel.open { transform: translateX(0); }
+.panel-close {
+  position: absolute; top: 16px; right: 16px; cursor: pointer;
+  color: var(--text-2); font-size: 18px; padding: 5px 7px;
+  border: 1px solid var(--border); border-radius: 6px; line-height: 1;
+  background: var(--bg-tertiary); transition: all 0.15s;
+}
+.panel-close:hover { color: var(--text-1); border-color: var(--text-2); }
+.panel-emoji { font-size: 30px; margin-bottom: 8px; }
+.panel-title { font-size: 18px; font-weight: 700; margin-bottom: 5px; }
+.panel-sub { font-size: 13px; color: var(--text-2); margin-bottom: 20px; }
+.panel-section { margin-bottom: 20px; }
+.panel-section h4 {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--text-2); margin-bottom: 8px; font-weight: 700;
+}
+.attr-list { display: flex; flex-direction: column; gap: 5px; }
+.attr-row {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  font-size: 12px; padding: 5px 0; border-bottom: 1px solid var(--border-subtle); gap: 8px;
+}
+.ak { color: var(--text-2); flex-shrink: 0; }
+.av { color: var(--text-1); font-family: 'JetBrains Mono', monospace; font-size: 11px; text-align: right; }
+
+/* Overlay */
+#overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+  z-index: 199; display: none; backdrop-filter: blur(2px);
+}
+#overlay.show { display: block; }
+
+/* Pulse animation */
+@keyframes pulse {
+  0%,100% { opacity: 0.5; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+.pulse-dot {
+  width: 7px; height: 7px; background: var(--blue); border-radius: 50%;
+  animation: pulse 2s infinite; display: inline-block;
+}
+
+/* Tooltip */
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  background: var(--bg-card); border: 1px solid var(--border); color: var(--text-1);
+  padding: 5px 10px; border-radius: 6px; font-size: 11px; white-space: nowrap;
+  z-index: 50; pointer-events: none;
+}
+
+/* Scroll hint */
+.hint { font-size: 11px; color: var(--text-3); margin-top: 10px; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-eyebrow">⚙️ System Architecture · Click any node for details</div>
+    <h1>Context Summarization Pipeline</h1>
+    <p>Intelligent context compression that preserves conversation fidelity while preventing LLM context window overflow — with unlimited follow-up questions.</p>
+    <div class="badges">
+      <span class="badge b-py">Python</span>
+      <span class="badge b-oai">OpenAI</span>
+      <span class="badge b-ant">Anthropic</span>
+      <span class="badge b-gg">Google</span>
+      <span class="badge b-oss">Self-Hosted</span>
+    </div>
+  </div>
+
+  <!-- MAIN TWO COLUMN -->
+  <div class="two-col">
+
+    <!-- LEFT -->
+    <div>
+
+      <!-- PIPELINE FLOW -->
+      <div class="section">
+        <div class="section-title">Core Pipeline Flow</div>
+        <div class="pipeline">
+
+          <!-- 1. Chat Interface -->
+          <div class="flow-node" onclick="show('chat')">
+            <div class="flow-inner">
+              <div class="flow-icon" style="background:rgba(88,166,255,0.12)">💬</div>
+              <div>
+                <div class="flow-name">Chat Interface</div>
+                <div class="flow-desc">Incoming message — human / ai / system / tool_call / tool_result</div>
+              </div>
+              <span class="flow-pill" style="background:var(--blue-bg);color:var(--blue);border:1px solid rgba(88,166,255,0.25)">Entry Point</span>
+            </div>
+          </div>
+
+          <div class="arrow"></div>
+
+          <!-- 2. Context Manager -->
+          <div class="flow-node" onclick="show('ctx')">
+            <div class="flow-inner">
+              <div class="flow-icon" style="background:rgba(88,166,255,0.12)">🧠</div>
+              <div>
+                <div class="flow-name">Context Manager</div>
+                <div class="flow-desc">Appends message to buffer · orchestrates the entire pipeline</div>
+              </div>
+              <span class="flow-pill" style="background:var(--blue-bg);color:var(--blue);border:1px solid rgba(88,166,255,0.25)">Orchestrator</span>
+            </div>
+          </div>
+
+          <div class="arrow"></div>
+
+          <!-- 3. Token Counter -->
+          <div class="flow-node" onclick="show('tokens')">
+            <div class="flow-inner">
+              <div class="flow-icon" style="background:rgba(163,113,247,0.12)">🔢</div>
+              <div>
+                <div class="flow-name">Token Counter</div>
+                <div class="flow-desc">Counts all tokens across message types · queries Model Registry for limit</div>
+              </div>
+              <span class="flow-pill" style="background:var(--purple-bg);color:var(--purple);border:1px solid rgba(163,113,247,0.25)">Evaluator</span>
+            </div>
+          </div>
+
+          <div class="arrow"></div>
+
+          <!-- 4. Threshold Evaluator -->
+          <div class="flow-node decision" onclick="show('threshold')">
+            <div class="flow-inner">
+              <div class="flow-icon" style="background:rgba(227,179,65,0.12)">⚡</div>
+              <div>
+                <div class="flow-name">Threshold Evaluator</div>
+                <div class="flow-desc">Is token count ≥ 80% of this model's context limit?  &nbsp;·&nbsp; Runs on: new message · after tool call · before LLM call</div>
+              </div>
+              <span class="flow-pill" style="background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(227,179,65,0.25)">Decision</span>
+            </div>
+          </div>
+
+          <!-- Connector to branch -->
+          <div style="height:26px;width:100%;max-width:820px;position:relative;">
+            <div style="position:absolute;left:50%;top:0;bottom:0;width:1.5px;background:var(--border)"></div>
+            <div style="position:absolute;left:32%;top:50%;width:18%;height:1.5px;background:var(--border)"></div>
+            <div style="position:absolute;left:50%;top:50%;width:18%;height:1.5px;background:var(--border)"></div>
+          </div>
+
+          <!-- Branch -->
+          <div class="branch">
+
+            <!-- Below threshold path -->
+            <div class="branch-path">
+              <span class="branch-label lbl-ok">✓ Below threshold</span>
+              <div class="flow-node" style="border-color:var(--zone-a);max-width:100%" onclick="show('llm-call')">
+                <div class="flow-inner">
+                  <div class="flow-icon" style="background:rgba(35,134,54,0.12)">🤖</div>
+                  <div>
+                    <div class="flow-name">Primary LLM Call</div>
+                    <div class="flow-desc">Full buffer passed as-is</div>
+                  </div>
+                </div>
+              </div>
+              <div class="arrow"></div>
+              <div class="flow-node" style="border-color:var(--zone-a);max-width:100%" onclick="show('response')">
+                <div class="flow-inner">
+                  <div class="flow-icon" style="background:rgba(35,134,54,0.12)">✅</div>
+                  <div>
+                    <div class="flow-name">AI Response</div>
+                    <div class="flow-desc">Appended to buffer · tool results loop back to Token Counter</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- At/above threshold path -->
+            <div class="branch-path">
+              <span class="branch-label lbl-hit">⚠ At / above threshold</span>
+
+              <!-- Compaction Pipeline -->
+              <div class="compact-box" onclick="show('compact')">
+                <div class="compact-title">🔥 Compaction Pipeline</div>
+                <div class="compact-steps">
+                  <div class="compact-step" onclick="event.stopPropagation();show('seg')">
+                    <span class="cs-icon">✂️</span>
+                    <div class="cs-name">Segmenter</div>
+                    <div class="cs-desc">Divide into 3 zones</div>
+                  </div>
+                  <span class="compact-arrow">→</span>
+                  <div class="compact-step" onclick="event.stopPropagation();show('fmt')">
+                    <span class="cs-icon">🗜️</span>
+                    <div class="cs-name">Tool Formatter</div>
+                    <div class="cs-desc">JSON → readable</div>
+                  </div>
+                  <span class="compact-arrow">→</span>
+                  <div class="compact-step" onclick="event.stopPropagation();show('cllm')">
+                    <span class="cs-icon">⚡</span>
+                    <div class="cs-name">Compact LLM</div>
+                    <div class="cs-desc">Cheap fast model</div>
+                  </div>
+                  <span class="compact-arrow">→</span>
+                  <div class="compact-step" onclick="event.stopPropagation();show('assemble')">
+                    <span class="cs-icon">🔧</span>
+                    <div class="cs-name">Assembler</div>
+                    <div class="cs-desc">Rebuild buffer</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="arrow"></div>
+              <div class="flow-node" style="max-width:100%" onclick="show('llm-call')">
+                <div class="flow-inner">
+                  <div class="flow-icon" style="background:rgba(163,113,247,0.12)">🤖</div>
+                  <div>
+                    <div class="flow-name">Primary LLM Call</div>
+                    <div class="flow-desc">Compacted buffer passed</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- end branch -->
+
+        </div><!-- end pipeline -->
+        <p class="hint">💡 Click any node to see details, code snippets, and implementation notes</p>
+      </div>
+
+      <!-- ZONES -->
+      <div class="section">
+        <div class="section-title">Message Buffer — 3-Zone Segmentation</div>
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:14px">
+          When compaction triggers, the buffer is segmented into three zones based on recency. Each zone receives different treatment to balance token savings vs. fidelity.
+        </p>
+        <div class="zone-wrap">
+          <div class="zone-row">
+            <div class="zone zone-c-seg" onclick="show('zone-c')" data-tip="Click for details">
+              <span class="zone-name" style="color:#f85149">🔴 Zone C — Full Compaction</span>
+              <span class="zone-sub">Everything before last user query<br>→ Compacted LLM → 1 summary chunk</span>
+            </div>
+            <div class="zone zone-b-seg" onclick="show('zone-b')" data-tip="Click for details">
+              <span class="zone-name" style="color:#a371f7">🟣 Zone B — High Fidelity</span>
+              <span class="zone-sub">From last user query → now<br>Messages kept · tool calls compressed</span>
+            </div>
+            <div class="zone zone-a-seg" onclick="show('zone-a')" data-tip="Click for details">
+              <span class="zone-name" style="color:#3fb950">🟢 Zone A — Preserved</span>
+              <span class="zone-sub">Latest 5 messages<br>Kept exactly as-is</span>
+            </div>
+          </div>
+          <div class="zone-bar">
+            <div class="zone-seg-bar" style="flex:3">
+              <div class="msg-blk" style="background:rgba(218,54,51,0.35)"></div>
+              <div class="msg-blk" style="background:rgba(218,54,51,0.28)"></div>
+              <div class="msg-blk" style="background:rgba(218,54,51,0.28)"></div>
+              <div class="msg-blk" style="background:rgba(218,54,51,0.22)"></div>
+              <div class="msg-blk" style="background:rgba(218,54,51,0.3)"></div>
+              <div class="msg-blk" style="background:rgba(218,54,51,0.22)"></div>
+              <div style="display:flex;align-items:center;color:var(--text-3);font-size:14px;margin:0 4px">→</div>
+              <div class="msg-blk" style="background:rgba(218,54,51,0.65);border:1px dashed var(--zone-c);display:flex;align-items:center;justify-content:center;min-width:60px">
+                <span style="font-size:9px;color:#f85149;font-weight:700;white-space:nowrap">SUMMARY</span>
+              </div>
+            </div>
+            <div class="zone-seg-bar" style="flex:2.5">
+              <div class="msg-blk" style="background:rgba(110,64,201,0.35);position:relative">
+                <span style="position:absolute;top:-12px;right:0;font-size:9px" title="tool call compressed">🔧</span>
+              </div>
+              <div class="msg-blk" style="background:rgba(110,64,201,0.45)"></div>
+              <div class="msg-blk" style="background:rgba(110,64,201,0.3);position:relative">
+                <span style="position:absolute;top:-12px;right:0;font-size:9px" title="tool call compressed">🔧</span>
+              </div>
+              <div class="msg-blk" style="background:rgba(110,64,201,0.5)"></div>
+            </div>
+            <div class="zone-seg-bar" style="flex:2">
+              <div class="msg-blk" style="background:rgba(35,134,54,0.55);border:1px solid rgba(63,185,80,0.4)"></div>
+              <div class="msg-blk" style="background:rgba(35,134,54,0.55);border:1px solid rgba(63,185,80,0.4)"></div>
+              <div class="msg-blk" style="background:rgba(35,134,54,0.6);border:1px solid rgba(63,185,80,0.4)"></div>
+              <div class="msg-blk" style="background:rgba(35,134,54,0.65);border:1px solid rgba(63,185,80,0.4)"></div>
+              <div class="msg-blk" style="background:rgba(35,134,54,0.7);border:1px solid rgba(63,185,80,0.4)"></div>
+            </div>
+          </div>
+          <div class="zone-labels">
+            <div style="flex:3">← Oldest messages (fully compacted into 1 chunk)</div>
+            <div style="flex:2.5">Current session (tool calls compressed)</div>
+            <div style="flex:2">Latest 5 unchanged →</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TRIGGER POINTS -->
+      <div class="section">
+        <div class="section-title">Trigger Points — When Threshold Checks Run</div>
+        <div class="trigger-grid">
+          <div class="trigger-card" onclick="show('trig-tool')">
+            <div class="trig-icon">🔨</div>
+            <div class="trig-name">After Every Tool Call</div>
+            <div class="trig-desc">Token count re-evaluated after each tool result is appended. Tool outputs can be verbose JSON that eats tokens fast.</div>
+          </div>
+          <div class="trigger-card" onclick="show('trig-pre')">
+            <div class="trig-icon">📤</div>
+            <div class="trig-name">Before Every LLM Call</div>
+            <div class="trig-desc">Final guard before sending context to the primary LLM. Prevents context overrun mid-response.</div>
+          </div>
+          <div class="trigger-card" onclick="show('trig-msg')">
+            <div class="trig-icon">💬</div>
+            <div class="trig-name">On New User Message</div>
+            <div class="trig-desc">Each new message is counted immediately after being appended to get ahead of threshold breaches early.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- IMPROVEMENTS -->
+      <div class="section">
+        <div class="section-title">💡 Recommended Improvements</div>
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">Beyond the core spec — these significantly increase robustness, cost-efficiency, and quality.</p>
+        <div class="improvements-grid">
+
+          <div class="imp-card" style="border-left-color:#f78166" onclick="show('imp-pin')">
+            <div class="imp-name">🏷️ Message Importance Scoring</div>
+            <div class="imp-desc">Tag messages at write-time as <code style="font-size:10px;color:var(--orange)">pinned</code>. System prompts, key decisions, and errors survive even Zone C full compaction. Prevents silent loss of critical context.</div>
+            <span class="imp-tag" style="background:rgba(247,129,102,0.1);color:var(--orange);border:1px solid rgba(247,129,102,0.3)">High Impact</span>
+          </div>
+
+          <div class="imp-card" style="border-left-color:#58a6ff" onclick="show('imp-async')">
+            <div class="imp-name">📈 Async Pre-emptive Compaction</div>
+            <div class="imp-desc">At 70% threshold, trigger compaction in a background thread. When 80% is hit, compaction is already done — zero latency spike mid-conversation.</div>
+            <span class="imp-tag" style="background:var(--blue-bg);color:var(--blue);border:1px solid rgba(88,166,255,0.3)">Latency Win</span>
+          </div>
+
+          <div class="imp-card" style="border-left-color:#3fb950" onclick="show('imp-rolling')">
+            <div class="imp-name">🔄 Rolling Summary State</div>
+            <div class="imp-desc">Maintain a persistent rolling summary updated incrementally. Each compaction only processes the delta since the last summary — dramatically cheaper than re-compacting the whole buffer every time.</div>
+            <span class="imp-tag" style="background:rgba(35,134,54,0.12);color:var(--green);border:1px solid rgba(35,134,54,0.3)">Cost Reduction</span>
+          </div>
+
+          <div class="imp-card" style="border-left-color:#a371f7" onclick="show('imp-ver')">
+            <div class="imp-name">💾 Summary Versioning</div>
+            <div class="imp-desc">Store each compaction's input, output, token delta, model used, and timestamp. Enables debugging, quality auditing, rollback, and conversation replay.</div>
+            <span class="imp-tag" style="background:var(--purple-bg);color:var(--purple);border:1px solid rgba(163,113,247,0.3)">Observability</span>
+          </div>
+
+          <div class="imp-card" style="border-left-color:#e3b341" onclick="show('imp-cb')">
+            <div class="imp-name">🛡️ Compaction Circuit Breaker</div>
+            <div class="imp-desc">If the compaction LLM fails or exceeds latency SLA, fall back to hard truncation of Zone C (oldest messages). Prevents full system failure when the compaction path is unhealthy.</div>
+            <span class="imp-tag" style="background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(227,179,65,0.3)">Resilience</span>
+          </div>
+
+          <div class="imp-card" style="border-left-color:#79c0ff" onclick="show('imp-metrics')">
+            <div class="imp-name">📊 Compression Ratio Metrics</div>
+            <div class="imp-desc">Track tokens-in vs tokens-out per compaction event, per model, per zone. Helps tune thresholds, evaluate compaction quality, and surface regressions over time.</div>
+            <span class="imp-tag" style="background:rgba(121,192,255,0.08);color:#79c0ff;border:1px solid rgba(121,192,255,0.3)">Monitoring</span>
+          </div>
+
+        </div>
+      </div>
+    </div><!-- end left -->
+
+    <!-- RIGHT -->
+    <div>
+
+      <!-- MODEL REGISTRY -->
+      <div class="section">
+        <div class="section-title">Model Registry</div>
+        <p style="font-size:12px;color:var(--text-2);margin-bottom:14px">Source of truth for context limits, thresholds, and compaction model assignments. Checked on every trigger.</p>
+
+        <div class="provider-card">
+          <div class="prov-header">
+            <div class="prov-icon" style="background:rgba(16,163,127,0.12)">🟢</div>
+            <div class="prov-name">OpenAI</div>
+          </div>
+          <div class="model-row"><span class="m-name">gpt-4o</span><span class="m-ctx">128k</span><span class="m-tag t-prim">primary</span></div>
+          <div class="model-row"><span class="m-name">gpt-4o-mini</span><span class="m-ctx">128k</span><span class="m-tag t-comp">compaction</span></div>
+          <div class="model-row"><span class="m-name">o3-mini</span><span class="m-ctx">200k</span><span class="m-tag t-prim">primary</span></div>
+        </div>
+
+        <div class="provider-card">
+          <div class="prov-header">
+            <div class="prov-icon" style="background:rgba(163,113,247,0.12)">🟣</div>
+            <div class="prov-name">Anthropic</div>
+          </div>
+          <div class="model-row"><span class="m-name">claude-sonnet-4-6</span><span class="m-ctx">200k</span><span class="m-tag t-prim">primary</span></div>
+          <div class="model-row"><span class="m-name">claude-opus-4-6</span><span class="m-ctx">200k</span><span class="m-tag t-prim">primary</span></div>
+          <div class="model-row"><span class="m-name">claude-haiku-4-5</span><span class="m-ctx">200k</span><span class="m-tag t-comp">compaction</span></div>
+        </div>
+
+        <div class="provider-card">
+          <div class="prov-header">
+            <div class="prov-icon" style="background:rgba(227,179,65,0.12)">🟡</div>
+            <div class="prov-name">Google</div>
+          </div>
+          <div class="model-row"><span class="m-name">gemini-2.0-flash</span><span class="m-ctx">1M</span><span class="m-tag t-prim">primary</span></div>
+          <div class="model-row"><span class="m-name">gemini-2.0-pro</span><span class="m-ctx">2M</span><span class="m-tag t-prim">primary</span></div>
+          <div class="model-row"><span class="m-name">gemini-flash-lite</span><span class="m-ctx">1M</span><span class="m-tag t-comp">compaction</span></div>
+        </div>
+
+        <div class="provider-card">
+          <div class="prov-header">
+            <div class="prov-icon" style="background:rgba(88,166,255,0.12)">🔵</div>
+            <div class="prov-name">Self-Hosted / Open Source</div>
+          </div>
+          <div class="model-row"><span class="m-name">llama-3.3-70b</span><span class="m-ctx">configurable</span><span class="m-tag t-prim">primary</span></div>
+          <div class="model-row"><span class="m-name">qwen2.5-7b</span><span class="m-ctx">configurable</span><span class="m-tag t-comp">compaction</span></div>
+        </div>
+      </div>
+
+      <!-- REGISTRY SCHEMA -->
+      <div class="section">
+        <div class="section-title">Registry Config Schema</div>
+        <div class="code-block">MODEL_REGISTRY = {
+  "openai/gpt-4o": {
+    "context_limit": 128_000,
+    "soft_threshold": 0.70,  # async
+    "hard_threshold": 0.80,  # block
+    "compaction_model":
+      "openai/gpt-4o-mini",
+    "token_counter": "tiktoken",
+    "zone_a_size": 5,
+  },
+  "anthropic/claude-sonnet-4-6": {
+    "context_limit": 200_000,
+    "soft_threshold": 0.70,
+    "hard_threshold": 0.80,
+    "compaction_model":
+      "anthropic/claude-haiku-4-5",
+    "token_counter": "anthropic-sdk",
+    "zone_a_size": 5,
+  },
+  "self-hosted/*": {
+    "context_limit": "env:MODEL_CTX",
+    "hard_threshold": 0.80,
+    "compaction_model":
+      "env:COMPACT_MODEL",
+    "token_counter": "transformers",
+  }
+}</div>
+      </div>
+
+      <!-- THRESHOLD BANDS -->
+      <div class="section">
+        <div class="section-title">Threshold Bands</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:44px;text-align:right;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--green)">0–70%</div>
+            <div style="flex:1;height:10px;background:rgba(35,134,54,0.25);border-radius:3px;border:1px solid rgba(35,134,54,0.4)"></div>
+            <div style="font-size:11px;color:var(--text-2)">Normal — no action</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:44px;text-align:right;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--yellow)">70–80%</div>
+            <div style="flex:1;height:10px;background:rgba(227,179,65,0.2);border-radius:3px;border:1px solid rgba(227,179,65,0.4)"></div>
+            <div style="font-size:11px;color:var(--text-2)">Soft — async pre-compact</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:44px;text-align:right;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--orange)">80–95%</div>
+            <div style="flex:1;height:10px;background:rgba(247,129,102,0.2);border-radius:3px;border:1px solid rgba(247,129,102,0.4)"></div>
+            <div style="font-size:11px;color:var(--text-2)">Hard — blocking compaction</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:44px;text-align:right;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--red)">95%+</div>
+            <div style="flex:1;height:10px;background:rgba(218,54,51,0.25);border-radius:3px;border:1px solid rgba(218,54,51,0.4)"></div>
+            <div style="font-size:11px;color:var(--text-2)">Circuit breaker — truncate</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end right -->
+  </div><!-- end two-col -->
+
+</div><!-- end page -->
+
+<!-- OVERLAY -->
+<div id="overlay" onclick="closePanel()"></div>
+
+<!-- DETAIL PANEL -->
+<div id="panel">
+  <span class="panel-close" onclick="closePanel()">✕</span>
+  <div id="panel-content"></div>
+</div>
+
+<script>
+const DATA = {
+  chat: {
+    emoji:'💬', title:'Chat Interface', sub:'Entry point for all message types',
+    attrs:[['Message types','human · ai · system · tool_call · tool_result'],['Format','OpenAI / Anthropic message array'],['Responsibility','Build message object, call Context Manager'],['Metadata','timestamp · message_id · importance flag']],
+    code:`# Incoming message wrapper
+@dataclass
+class Message:
+    role: str          # user|assistant|system|tool
+    content: str
+    tool_calls: list   # for assistant role
+    tool_call_id: str  # for tool role
+    metadata: dict = field(default_factory=lambda: {
+        "timestamp": datetime.utcnow().isoformat(),
+        "message_id": str(uuid4()),
+        "importance": "normal",  # or "pinned"
+    })`
+  },
+  ctx: {
+    emoji:'🧠', title:'Context Manager', sub:'Central orchestrator — owns the message buffer',
+    attrs:[['Owns','Message buffer + rolling summary state'],['Calls','TokenCounter · ModelRegistry · CompactionEngine'],['On add_message','Append → count tokens → check threshold'],['Thread-safe','asyncio.Lock for concurrent tool calls']],
+    code:`class ContextManager:
+    def __init__(self, model_id: str):
+        self.model_id = model_id
+        self.buffer: list[Message] = []
+        self.rolling_summary: str = ""
+        self._lock = asyncio.Lock()
+
+    async def add_message(self, msg: Message):
+        async with self._lock:
+            self.buffer.append(msg)
+            await self._check_threshold()
+
+    async def pre_llm_check(self):
+        await self._check_threshold()
+
+    async def _check_threshold(self):
+        ratio = token_counter.ratio(
+            self.buffer, self.model_id)
+        if ratio >= 0.80:
+            await self.run_compaction()
+        elif ratio >= 0.70:
+            asyncio.create_task(
+                self.run_compaction())  # async`
+  },
+  tokens: {
+    emoji:'🔢', title:'Token Counter', sub:'Accurate counting per provider',
+    attrs:[['OpenAI','tiktoken — cl100k_base / o200k_base'],['Anthropic','anthropic.count_tokens() SDK call'],['Google','genai.count_tokens() SDK call'],['Self-hosted','transformers AutoTokenizer'],['Scope','Counts all roles: human + ai + system + tools']],
+    code:`class TokenCounter:
+    def count(self, msgs: list, model_id: str) -> int:
+        provider, _ = model_id.split("/", 1)
+        if provider == "openai":
+            return self._tiktoken(msgs, model_id)
+        elif provider == "anthropic":
+            return self._anthropic_count(msgs)
+        elif provider == "google":
+            return self._gemini_count(msgs)
+        return self._hf_count(msgs, model_id)
+
+    def ratio(self, msgs, model_id) -> float:
+        limit = registry.get(model_id)["context_limit"]
+        return self.count(msgs, model_id) / limit`
+  },
+  threshold: {
+    emoji:'⚡', title:'Threshold Evaluator', sub:'Decides compaction mode based on usage ratio',
+    attrs:[['Soft threshold','70% → async background compaction'],['Hard threshold','80% → blocking compaction before LLM call'],['Circuit breaker','95% → truncate Zone C, skip compaction LLM'],['Configurable','Per-model in Model Registry']],
+    code:`class ThresholdEvaluator:
+    def evaluate(self, ratio: float, cfg: dict) -> str:
+        if ratio >= 0.95:
+            return "TRUNCATE"      # circuit breaker
+        elif ratio >= cfg["hard_threshold"]:
+            return "COMPACT"       # blocking
+        elif ratio >= cfg["soft_threshold"]:
+            return "PREEMPTIVE"    # async
+        return "OK"
+
+# Called at:
+# ① add_message()     - after user msg
+# ② post_tool_call()  - after tool result
+# ③ pre_llm_call()    - before LLM request`
+  },
+  compact: {
+    emoji:'🔥', title:'Compaction Pipeline', sub:'Triggered at 80% — runs before the next LLM call',
+    attrs:[['Step 1','Message Segmenter → 3 zones (A/B/C)'],['Step 2','Tool Formatter → compress Zone B tool JSONs'],['Step 3','Compaction LLM → summarize Zone C into 1 chunk'],['Step 4','Assembler → rebuild clean buffer'],['Output','[summary_msg] + zone_b_msgs + zone_a_msgs']],
+    code:`async def run_compaction(self):
+    seg = Segmenter(self.buffer, zone_a_size=5)
+    zone_a = seg.zone_a()   # last 5: unchanged
+    zone_b = seg.zone_b()   # last query → A: compress tools
+    zone_c = seg.zone_c()   # rest: full summary
+
+    # Compress tool calls in Zone B
+    zone_b_clean = ToolFormatter().compress(zone_b)
+
+    # Summarize Zone C with cheap LLM
+    summary = await CompactionLLM(
+        model=registry.compact_model(self.model_id)
+    ).summarize(zone_c, self.rolling_summary)
+
+    # Reassemble buffer
+    summary_msg = Message(role="system",
+        content=f"<context_summary>{summary}</context_summary>")
+    self.buffer = [summary_msg] + zone_b_clean + zone_a
+    self.rolling_summary = summary`
+  },
+  seg: {
+    emoji:'✂️', title:'Message Segmenter', sub:'Splits the buffer into 3 zones',
+    attrs:[['Zone A','buffer[-zone_a_size:]  — last 5 msgs'],['Zone B','from last human msg idx → Zone A start'],['Zone C','buffer[0 : last_human_msg_idx]'],['Zone A size','Configurable (default: 5)'],['Pinned msgs','Pinned msgs from Zone C appended to Zone B']],
+    code:`class Segmenter:
+    def __init__(self, buffer, zone_a_size=5):
+        self.buf = buffer
+        self.za_size = zone_a_size
+        self._last_human = self._find_last_human()
+
+    def _find_last_human(self):
+        for i in range(len(self.buf)-1, -1, -1):
+            if self.buf[i].role == "user":
+                return i
+        return 0
+
+    def zone_a(self): return self.buf[-self.za_size:]
+    def zone_b(self): return self.buf[self._last_human : -self.za_size]
+    def zone_c(self): return self.buf[:self._last_human]
+
+    def pinned(self):
+        # Pinned msgs survive Zone C compaction
+        return [m for m in self.zone_c()
+                if m.metadata.get("importance") == "pinned"]`
+  },
+  fmt: {
+    emoji:'🗜️', title:'Tool Call Formatter', sub:'Compresses verbose JSON tool calls in Zone B',
+    attrs:[['Input','Full tool_call + tool_result message pair'],['Output','Single line: [tool_name] input → output'],['Savings','~95% token reduction on typical API tool results'],['Applied to','Zone B only — Zone A tool calls kept as-is']],
+    code:`# BEFORE (tool_call + tool_result = ~600 tokens)
+{"role":"assistant","tool_calls":[{
+  "name":"web_search",
+  "input":{"query":"Paris weather forecast"}
+}]}
+{"role":"tool","content":{"results":[
+  {"title":"...","snippet":"..."},
+  ...200 more items...
+]}}
+
+# AFTER (~14 tokens)
+[web_search] query="Paris weather forecast"
+  → 200 results · top: "Sunny 22°C, wind 10km/h"
+
+def compress(self, msg_pair) -> str:
+    name = msg_pair.tool_call["name"]
+    inp  = shorten(msg_pair.tool_call["input"], 80)
+    out  = shorten(msg_pair.tool_result["content"], 120)
+    return f"[{name}] {inp} → {out}"`
+  },
+  cllm: {
+    emoji:'⚡', title:'Compaction LLM', sub:'Cheap fast model used exclusively for Zone C summarization',
+    attrs:[['For OpenAI','gpt-4o-mini (128k ctx, low cost)'],['For Anthropic','claude-haiku-4-5 (200k ctx)'],['For Google','gemini-flash-lite (1M ctx)'],['For self-hosted','configurable via env var'],['Prompt style','System: summarizer role · Human: messages to compact']],
+    code:`COMPACT_SYSTEM = """You are a context compactor for an AI
+assistant. Summarize the provided conversation messages into
+a dense, complete summary that preserves ALL key facts,
+decisions, errors, user goals, and outcomes. Use bullet
+points. Preserve exact values (numbers, names, dates).
+Do not editorialize — this summary replaces the original."""
+
+async def summarize(self, zone_c: list, prev_summary: str):
+    prompt = self._build_prompt(zone_c, prev_summary)
+    resp = await self.client.messages.create(
+        model=self.model,
+        max_tokens=1024,
+        system=COMPACT_SYSTEM,
+        messages=[{"role":"user","content":prompt}]
+    )
+    return resp.content[0].text`
+  },
+  assemble: {
+    emoji:'🔧', title:'Context Assembler', sub:'Rebuilds the message buffer after compaction',
+    attrs:[['Output','[summary_msg] + zone_b_compressed + zone_a_raw'],['Summary format','role: system · wrapped in <context_summary> tags'],['Metadata','Stores token delta, model, timestamp in summary msg'],['Side effect','Updates rolling_summary state on ContextManager']],
+    code:`def assemble(self, summary: str, zone_b, zone_a,
+              original_count: int) -> list[Message]:
+    summary_msg = Message(
+        role="system",
+        content=(
+            "<context_summary>\\n"
+            f"{summary}\\n"
+            "</context_summary>"
+        ),
+        metadata={
+            "type": "compaction_summary",
+            "original_message_count": original_count,
+            "original_tokens": self.tokens_before,
+            "compacted_tokens": token_counter.count(
+                [summary_msg], self.model_id),
+            "compacted_at": datetime.utcnow().isoformat(),
+        }
+    )
+    return [summary_msg] + zone_b + zone_a`
+  },
+  'llm-call': {
+    emoji:'🤖', title:'Primary LLM Call', sub:'The main model — called with (compacted) context',
+    attrs:[['Pre-call check','Always runs threshold evaluator before call'],['Context passed','Full buffer (or compacted buffer if triggered)'],['Response','AI message + optional tool_calls field'],['Post-call','Response appended → token check → execute tools?']],
+    code:`async def invoke(self):
+    # Always gate-check before calling
+    await self.ctx_manager.pre_llm_check()
+
+    response = await llm_client.chat(
+        model=self.model_id,
+        messages=self.ctx_manager.buffer
+    )
+
+    ai_msg = Message(role="assistant",
+        content=response.content,
+        tool_calls=response.tool_calls)
+    await self.ctx_manager.add_message(ai_msg)
+
+    # If tools requested, execute and loop back
+    if response.tool_calls:
+        for tc in response.tool_calls:
+            result = await execute_tool(tc)
+            tool_msg = Message(role="tool",
+                content=result, tool_call_id=tc.id)
+            await self.ctx_manager.add_message(tool_msg)`
+  },
+  response: {
+    emoji:'✅', title:'AI Response Handling', sub:'After LLM returns — append, check, loop',
+    attrs:[['Actions','Append AI msg → check threshold → execute tools'],['Tool loop','Each tool result triggers threshold re-check'],['No compaction','If below threshold, next user message accepted'],['Streaming','Token count updated progressively during stream']],
+    code:`# Simplified turn loop
+async def turn(user_input: str):
+    user_msg = Message(role="user", content=user_input)
+    await ctx.add_message(user_msg)   # ← check #1
+
+    while True:
+        response = await llm.invoke()  # pre-check inside
+
+        if not response.tool_calls:
+            break  # final answer
+
+        for tc in response.tool_calls:
+            result = await tool_runner.run(tc)
+            tool_msg = Message(role="tool", content=result)
+            await ctx.add_message(tool_msg)  # ← check #2
+
+    return response.content`
+  },
+  'zone-c': {
+    emoji:'🔴', title:'Zone C — Full Compaction', sub:'Everything before the last user query',
+    attrs:[['Boundary','buffer[0 : last_human_message_idx]'],['Treatment','Sent to compaction LLM → becomes 1 summary chunk'],['Output','Single system message: <context_summary>…</context_summary>'],['Exception','Pinned messages are appended to Zone B, not lost'],['Typical size','60–80% of total buffer']],
+    code:`# Zone C output structure
+{
+  "role": "system",
+  "content": (
+    "<context_summary>\\n"
+    "## Session History Summary\\n"
+    "- User is building a Python web scraper\\n"
+    "- Decided to use httpx + BeautifulSoup\\n"
+    "- Fixed encoding bug in parse_html() line 42\\n"
+    "- API rate limit: 10 req/s, retry after 429\\n"
+    "- [search] 'httpx docs' → async client example\\n"
+    "...\\n"
+    "</context_summary>"
+  ),
+  "metadata": {
+    "type": "compaction_summary",
+    "original_message_count": 38,
+    "original_tokens": 22000,
+    "compacted_tokens": 950,
+    "ratio": "95.7% reduction"
+  }
+}`
+  },
+  'zone-b': {
+    emoji:'🟣', title:'Zone B — High Fidelity', sub:'From last user query to Zone A start',
+    attrs:[['Boundary','buffer[last_human_idx : -zone_a_size]'],['Messages','Kept as-is (human + ai messages)'],['Tool calls','Compressed: JSON → "tool_name input → output"'],['Rationale','Recent session context; tool payloads are the biggest token drain'],['Typical size','15–30% of buffer']],
+    code:`# Zone B: tool call compression example
+
+# BEFORE (assistant + tool msgs = ~400 tokens)
+{"role":"assistant","tool_calls":[{
+  "name":"read_file","input":{"path":"app.py"}
+}]}
+{"role":"tool","content":"import flask\\n
+def create_app():\\n  app = Flask(...)\\n
+...600 more lines..."}
+
+# AFTER (single compressed line, ~20 tokens)
+[read_file] path="app.py"
+  → 600-line Flask app, create_app() factory pattern
+
+# Zone B messages passed as-is except tool pairs
+# Human/AI dialogue preserved verbatim`
+  },
+  'zone-a': {
+    emoji:'🟢', title:'Zone A — Preserved', sub:'Latest N messages — kept exactly as-is',
+    attrs:[['Size','Last 5 messages (configurable per registry entry)'],['Content','All roles: human · ai · tool_call · tool_result'],['No modification','Zero transformation — byte-for-byte identical'],['Rationale','Preserves full context of current exchange'],['Config','zone_a_size in Model Registry (default: 5)']],
+    code:`# Zone A is simply a slice
+zone_a = buffer[-5:]
+
+# Why 5?
+# Minimum useful context window:
+# 1: last user message
+# 2: last AI response (may have tool_calls)
+# 3: last tool result
+# 4: AI response after tool
+# 5: previous user message for continuity
+
+# You can increase to 10–15 for complex
+# multi-tool workflows without major cost impact`
+  },
+  'trig-tool': {
+    emoji:'🔨', title:'Trigger: After Tool Call', sub:'Most critical trigger point',
+    attrs:[['Why','Tool results (JSON APIs, file reads) can be enormous'],['Example','A single DB query result: 50k tokens'],['When','Immediately after tool_result appended to buffer'],['Action','Count tokens → evaluate ratio → compact if needed']],
+    code:`# Tool call post-hook
+async def on_tool_result(self, result: ToolResult):
+    msg = Message(role="tool",
+        content=result.output,
+        tool_call_id=result.call_id)
+
+    async with self._lock:
+        self.buffer.append(msg)
+
+        # ← TRIGGER: check immediately
+        ratio = token_counter.ratio(
+            self.buffer, self.model_id)
+        if ratio >= 0.80:
+            await self.run_compaction()
+            logger.info(f"Compacted after tool "
+                f"'{result.tool_name}' "
+                f"(ratio was {ratio:.1%})")`
+  },
+  'trig-pre': {
+    emoji:'📤', title:'Trigger: Before LLM Call', sub:'Final safety guard',
+    attrs:[['Why','Last line of defense before sending to LLM'],['Position','Inside invoke(), before API call'],['Guarantees','Buffer never exceeds model context limit'],['Handles','Cases where soft threshold was missed']],
+    code:`async def invoke(self) -> Response:
+    # ← TRIGGER: always check before calling
+    ratio = token_counter.ratio(
+        self.buffer, self.model_id)
+
+    if ratio >= 0.95:
+        self._truncate_zone_c()   # circuit breaker
+    elif ratio >= 0.80:
+        await self.run_compaction()  # blocking
+
+    # Only now do we call the LLM
+    return await self.client.create(
+        model=self.model_id,
+        messages=self._to_api_format(self.buffer)
+    )`
+  },
+  'trig-msg': {
+    emoji:'💬', title:'Trigger: On New User Message', sub:'Early detection before context grows',
+    attrs:[['Why','User messages can be long (code pastes, documents)'],['When','After appending new human message to buffer'],['Benefit','Compacts before the AI response adds more tokens'],['Order','Append → count → check → compact if needed → return']],
+    code:`async def add_message(self, msg: Message):
+    self.buffer.append(msg)
+
+    # ← TRIGGER: check immediately on every add
+    if msg.role == "user":
+        ratio = token_counter.ratio(
+            self.buffer, self.model_id)
+
+        if ratio >= 0.80:
+            await self.run_compaction()
+            logger.info("Compacted on user message "
+                f"(ratio: {ratio:.1%})")
+        elif ratio >= 0.70:
+            # Soft trigger: start async
+            asyncio.create_task(self.run_compaction())`
+  },
+  'imp-pin': {
+    emoji:'🏷️', title:'Improvement: Message Importance Scoring', sub:'Protect critical context from compaction',
+    attrs:[['Problem','Compaction LLM may drop important context silently'],['Solution','Tag messages pinned at write-time'],['Pinned examples','System prompt · key decisions · errors · user goals'],['Behavior','Pinned msgs in Zone C moved to Zone B before compaction']],
+    code:`# Tagging messages at write-time
+ctx.add_message(Message(
+    role="system",
+    content="You are a Python expert...",
+    metadata={"importance": "pinned"}  # ← survives Zone C
+))
+
+# In Segmenter
+def zone_c(self):
+    raw = self.buf[:self._last_human]
+    # Pinned messages are EXCLUDED from Zone C
+    return [m for m in raw
+            if m.metadata.get("importance") != "pinned"]
+
+def pinned_from_c(self):
+    raw = self.buf[:self._last_human]
+    return [m for m in raw
+            if m.metadata.get("importance") == "pinned"]
+# Pinned msgs prepended to Zone B instead`
+  },
+  'imp-async': {
+    emoji:'📈', title:'Improvement: Async Pre-emptive Compaction', sub:'Eliminate latency spikes at 80%',
+    attrs:[['Problem','80% compaction blocks the conversation with wait time'],['Solution','Start compaction at 70% in background asyncio task'],['At 80%','Compaction is already done — zero wait'],['Risk','Background task may race with new messages — use lock']],
+    code:`# Soft threshold → background task
+elif ratio >= 0.70:
+    if not self._compact_task_running:
+        self._compact_task_running = True
+        asyncio.create_task(
+            self._background_compact()
+        )
+
+async def _background_compact(self):
+    try:
+        async with self._compact_lock:
+            # Re-check — might already be done
+            ratio = token_counter.ratio(...)
+            if ratio >= 0.70:
+                await self.run_compaction()
+    finally:
+        self._compact_task_running = False`
+  },
+  'imp-rolling': {
+    emoji:'🔄', title:'Improvement: Rolling Summary State', sub:'Incremental compaction — far cheaper',
+    attrs:[['Problem','Batch compaction re-summarizes already-summarized content'],['Solution','Keep a rolling_summary; each run only adds the delta'],['Cost','~10x cheaper per compaction event'],['Quality','Progressive summaries are often more coherent']],
+    code:`# Rolling summary: only delta since last compaction
+async def run_compaction(self):
+    zone_c = segmenter.zone_c()
+
+    # Pass previous summary as context
+    new_summary = await compact_llm.summarize(
+        messages=zone_c,
+        previous_summary=self.rolling_summary  # ← key
+    )
+    self.rolling_summary = new_summary
+
+# Compaction LLM prompt:
+COMPACT_SYSTEM = """
+Given a previous conversation summary and new messages,
+produce an updated summary. Do not re-summarize what is
+already in the previous summary — only integrate new info.
+"""`
+  },
+  'imp-ver': {
+    emoji:'💾', title:'Improvement: Summary Versioning', sub:'Full audit trail of every compaction',
+    attrs:[['Problem','Hard to debug when compaction drops context'],['Solution','Log every compaction: input, output, tokens, model'],['Storage','DB table or JSONL file per session'],['Use cases','Debug · quality eval · conversation replay · rollback']],
+    code:`# Compaction version record
+@dataclass
+class CompactionRecord:
+    session_id: str
+    version: int
+    timestamp: str
+    primary_model: str
+    compaction_model: str
+    zone_c_messages: list    # original
+    zone_b_messages: list    # original
+    zone_a_messages: list    # original
+    summary_text: str        # output
+    tokens_before: int
+    tokens_after: int
+    reduction_pct: float
+
+# Store after each compaction
+records_store.append(asdict(record))
+# Enables: replay, rollback, quality scoring`
+  },
+  'imp-cb': {
+    emoji:'🛡️', title:'Improvement: Compaction Circuit Breaker', sub:'Fallback when compaction LLM fails',
+    attrs:[['Problem','If compaction LLM is down, chat grinds to a halt'],['Solution','At 95% → truncate Zone C without calling compact LLM'],['Also triggers','Compaction LLM timeout > SLA (e.g. 10s)'],['Trade-off','Some context lost but conversation continues']],
+    code:`async def run_compaction(self):
+    try:
+        async with asyncio.timeout(10.0):  # SLA
+            await self._do_compact_llm()
+    except (asyncio.TimeoutError, APIError) as e:
+        logger.warning(f"Compaction LLM failed: {e}")
+        self._fallback_truncate()
+
+def _fallback_truncate(self):
+    """Hard truncate Zone C — no LLM required."""
+    zone_b = segmenter.zone_b()
+    zone_a = segmenter.zone_a()
+    stub = Message(role="system",
+        content="[Earlier context truncated due to "
+                "compaction failure]")
+    self.buffer = [stub] + zone_b + zone_a`
+  },
+  'imp-metrics': {
+    emoji:'📊', title:'Improvement: Compression Ratio Metrics', sub:'Observability for the compaction system',
+    attrs:[['Track','tokens_in · tokens_out · ratio · model · zone · latency'],['Alerts','Alert if ratio < 50% (bad compaction)'],['Dashboard','Grafana / Datadog / simple JSONL log'],['Value','Tune thresholds · detect quality regressions']],
+    code:`# Emit metrics after each compaction
+metrics.gauge("compaction.tokens_before",
+    tokens_before,
+    tags={"model": model_id, "zone": "C"})
+
+metrics.gauge("compaction.tokens_after",
+    tokens_after,
+    tags={"model": model_id})
+
+metrics.gauge("compaction.reduction_pct",
+    (1 - tokens_after/tokens_before) * 100,
+    tags={"model": model_id})
+
+metrics.timing("compaction.latency_ms",
+    elapsed_ms,
+    tags={"compact_model": compact_model_id})
+
+# Alert rule: reduction_pct < 50 → bad prompt`
+  }
+};
+
+function show(key) {
+  const d = DATA[key];
+  if (!d) return;
+  const el = document.getElementById('panel-content');
+  el.innerHTML = `
+    <div class="panel-emoji">${d.emoji}</div>
+    <div class="panel-title">${d.title}</div>
+    <div class="panel-sub">${d.sub}</div>
+    <div class="panel-section">
+      <h4>Properties</h4>
+      <div class="attr-list">
+        ${d.attrs.map(([k,v])=>`
+          <div class="attr-row">
+            <span class="ak">${k}</span>
+            <span class="av">${v}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div class="panel-section">
+      <h4>Code Reference</h4>
+      <div class="code-block">${d.code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+    </div>`;
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('overlay').classList.add('show');
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePanel();
+});
+</script>
+</body>
+</html>

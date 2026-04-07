@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Context Summarization — Live Pipeline Simulator</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d; --bg4: #1c2128;
+  --border: #30363d; --t1: #e6edf3; --t2: #8b949e; --t3: #484f58;
+  --blue: #58a6ff; --purple: #a371f7; --green: #3fb950;
+  --yellow: #e3b341; --red: #f85149; --orange: #f78166;
+  --zone-c: #da3633; --zone-b: #6e40c9; --zone-a: #238636;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--t1);line-height:1.5;min-height:100vh}
+.page{max-width:1400px;margin:0 auto;padding:24px 20px 48px}
+
+/* HEADER */
+.hdr{margin-bottom:20px;display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.hdr-left h1{font-size:22px;font-weight:700;letter-spacing:-.3px}
+.hdr-left p{font-size:13px;color:var(--t2);margin-top:4px}
+.model-badge{display:inline-flex;align-items:center;gap:7px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px}
+.model-badge .dot{width:7px;height:7px;background:var(--green);border-radius:50%}
+
+/* TOKEN METER */
+.meter-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:16px}
+.meter-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.meter-label{font-size:12px;color:var(--t2);font-weight:600}
+.meter-count{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600}
+.meter-bar{height:10px;background:var(--bg3);border-radius:5px;overflow:hidden;position:relative}
+.meter-fill{height:100%;border-radius:5px;transition:width 0.6s ease,background 0.4s;position:relative}
+.meter-threshold{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--yellow);border-radius:1px}
+.meter-zones{display:flex;margin-top:5px;font-size:10px;color:var(--t3)}
+.meter-zones span{flex:1}
+
+/* LAYOUT */
+.layout{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
+@media(max-width:1000px){.layout{grid-template-columns:1fr}}
+
+/* MESSAGE BUFFER */
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.panel-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg3)}
+.panel-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t2)}
+.msg-count{font-size:11px;color:var(--t2);font-family:'JetBrains Mono',monospace}
+
+.msg-list{max-height:520px;overflow-y:auto;padding:8px}
+.msg-list::-webkit-scrollbar{width:5px}
+.msg-list::-webkit-scrollbar-track{background:transparent}
+.msg-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+.msg{border-radius:7px;margin-bottom:4px;padding:8px 10px;border:1px solid transparent;transition:all 0.35s ease;cursor:default;position:relative}
+.msg-role{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+.msg-content{font-size:12px;line-height:1.5;color:var(--t1)}
+.msg-tokens{font-size:9px;color:var(--t3);font-family:'JetBrains Mono',monospace;margin-top:3px}
+.msg-content code{font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(255,255,255,0.06);padding:1px 4px;border-radius:3px}
+
+/* role colors */
+.msg-system  {background:rgba(88,166,255,.05);border-color:rgba(88,166,255,.15)}
+.msg-system .msg-role{color:var(--blue)}
+.msg-human   {background:rgba(63,185,80,.05);border-color:rgba(63,185,80,.15)}
+.msg-human .msg-role{color:var(--green)}
+.msg-ai      {background:rgba(163,113,247,.05);border-color:rgba(163,113,247,.15)}
+.msg-ai .msg-role{color:var(--purple)}
+.msg-tool-call{background:rgba(227,179,65,.05);border-color:rgba(227,179,65,.12)}
+.msg-tool-call .msg-role{color:var(--yellow)}
+.msg-tool-result{background:rgba(247,129,102,.05);border-color:rgba(247,129,102,.12)}
+.msg-tool-result .msg-role{color:var(--orange)}
+
+/* zone highlights */
+.zone-c-hl{background:rgba(218,54,51,.15)!important;border-color:rgba(218,54,51,.5)!important;box-shadow:inset 3px 0 0 var(--zone-c)}
+.zone-b-hl{background:rgba(110,64,201,.15)!important;border-color:rgba(110,64,201,.5)!important;box-shadow:inset 3px 0 0 var(--zone-b)}
+.zone-a-hl{background:rgba(35,134,54,.15)!important;border-color:rgba(35,134,54,.5)!important;box-shadow:inset 3px 0 0 var(--zone-a)}
+.zone-compressed{opacity:.55;text-decoration:line-through;background:rgba(218,54,51,.05)!important}
+.zone-tool-compressed{border-color:rgba(227,179,65,.5)!important;background:rgba(227,179,65,.08)!important}
+.zone-tool-compressed .msg-content{color:var(--yellow)!important;font-family:'JetBrains Mono',monospace;font-size:11px}
+.msg-summary{background:rgba(88,166,255,.08)!important;border:1px solid rgba(88,166,255,.4)!important;box-shadow:inset 3px 0 0 var(--blue)}
+.msg-summary .msg-role{color:var(--blue)}
+
+/* zone dividers */
+.zone-divider{display:flex;align-items:center;gap:8px;margin:4px 0;padding:4px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.06em;opacity:0;transition:opacity .4s}
+.zone-divider.visible{opacity:1}
+.zd-c{color:var(--zone-c);background:rgba(218,54,51,.08);border:1px dashed rgba(218,54,51,.3)}
+.zd-b{color:#a371f7;background:rgba(110,64,201,.08);border:1px dashed rgba(110,64,201,.3)}
+.zd-a{color:var(--green);background:rgba(35,134,54,.08);border:1px dashed rgba(35,134,54,.3)}
+
+/* PIPELINE PANEL */
+.pipeline-steps{padding:14px}
+.step{border-radius:8px;padding:12px;margin-bottom:8px;border:1px solid var(--border);background:var(--bg3);transition:all .3s}
+.step.active{border-color:var(--blue);background:rgba(31,111,235,.08);box-shadow:0 0 0 1px rgba(88,166,255,.2)}
+.step.done{border-color:var(--green);background:rgba(35,134,54,.06)}
+.step-header{display:flex;align-items:center;gap:10px}
+.step-num{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:var(--bg);border:1px solid var(--border);flex-shrink:0;transition:all .3s}
+.step.active .step-num{background:var(--blue);border-color:var(--blue);color:#000}
+.step.done .step-num{background:var(--green);border-color:var(--green);color:#000}
+.step-name{font-size:13px;font-weight:600}
+.step-status{margin-left:auto;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px}
+.s-waiting{color:var(--t3);background:var(--bg);border:1px solid var(--border)}
+.s-running{color:var(--yellow);background:rgba(227,179,65,.1);border:1px solid rgba(227,179,65,.3)}
+.s-done{color:var(--green);background:rgba(35,134,54,.1);border:1px solid rgba(35,134,54,.3)}
+.step-detail{font-size:12px;color:var(--t2);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:none;line-height:1.6}
+.step.active .step-detail,.step.done .step-detail{display:block}
+.step-detail code{font-family:'JetBrains Mono',monospace;font-size:10px;background:rgba(255,255,255,.05);padding:1px 4px;border-radius:3px;color:var(--blue)}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .2s}
+.btn-primary{background:var(--blue);color:#000}
+.btn-primary:hover{background:#79baff}
+.btn-primary:disabled{background:var(--bg3);color:var(--t3);cursor:not-allowed}
+.btn-ghost{background:var(--bg3);color:var(--t1);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--t2)}
+.btn-row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+
+/* COMPARISON */
+.compare{background:var(--bg2);border:1px solid var(--border);border-radius:10px;margin-top:16px;overflow:hidden;display:none}
+.compare.visible{display:block}
+.compare-header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg3)}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.compare-side{padding:16px}
+.compare-side:first-child{border-right:1px solid var(--border)}
+.compare-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.compare-stat{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)}
+.compare-stat:last-child{border:none}
+.stat-key{color:var(--t2)}
+.stat-val{font-family:'JetBrains Mono',monospace;font-weight:600}
+.compare-msgs{margin-top:12px;max-height:280px;overflow-y:auto}
+.cm{border-radius:5px;padding:6px 8px;margin-bottom:3px;font-size:11px;border-left:3px solid}
+.cm-system{border-color:var(--blue);background:rgba(88,166,255,.06);color:var(--t2)}
+.cm-human{border-color:var(--green);background:rgba(63,185,80,.06)}
+.cm-ai{border-color:var(--purple);background:rgba(163,113,247,.06)}
+.cm-tool{border-color:var(--yellow);background:rgba(227,179,65,.06);color:var(--t2)}
+.cm-summary{border-color:var(--blue);background:rgba(88,166,255,.1);color:var(--blue);font-style:italic}
+.cm-label{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--t3);margin-bottom:2px}
+.reduction-badge{display:inline-block;background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.3);color:var(--green);padding:4px 10px;border-radius:5px;font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace}
+
+/* SPINNER */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:12px;height:12px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--yellow);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+
+/* PULSE */
+@keyframes pulse{0%,100%{opacity:.7;transform:scale(.98)}50%{opacity:1;transform:scale(1.01)}}
+.pulsing{animation:pulse 1.5s ease-in-out infinite}
+
+/* Scroll to bottom hint */
+.scroll-hint{text-align:center;font-size:11px;color:var(--t3);padding:6px}
+
+/* compact LLM output box */
+.llm-output{background:var(--bg);border:1px solid rgba(88,166,255,.2);border-radius:6px;padding:10px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#79c0ff;line-height:1.7;margin-top:8px;max-height:160px;overflow-y:auto;white-space:pre-wrap;display:none}
+.llm-output.visible{display:block}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-left">
+    <h1>🔬 Context Summarization — Live Pipeline Simulator</h1>
+    <p>Mock conversation: Python web scraper session · Watch each step of the compaction algorithm in real-time</p>
+  </div>
+  <div class="model-badge">
+    <span class="dot"></span>
+    <span>claude-sonnet-4-6</span>
+    <span style="color:var(--t3)">·</span>
+    <span style="color:var(--t2)">200k ctx limit</span>
+    <span style="color:var(--t3)">·</span>
+    <span style="color:var(--yellow)">80% threshold = 6,000 tokens (demo)</span>
+  </div>
+</div>
+
+<!-- TOKEN METER -->
+<div class="meter-wrap">
+  <div class="meter-top">
+    <span class="meter-label">Context Window Usage</span>
+    <span class="meter-count" id="token-display">0 / 7,500 tokens</span>
+  </div>
+  <div class="meter-bar">
+    <div class="meter-fill" id="meter-fill" style="width:0%"></div>
+    <div class="meter-threshold" id="threshold-line" style="left:80%"></div>
+  </div>
+  <div class="meter-zones">
+    <span style="color:var(--green)">0% ── safe ──</span>
+    <span style="text-align:center;color:var(--yellow)">── pre-compact ──</span>
+    <span style="text-align:right;color:var(--red)">── compacting ── 100%</span>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+  <!-- LEFT: MESSAGE BUFFER -->
+  <div>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Message Buffer</span>
+        <span class="msg-count" id="msg-count">0 messages</span>
+      </div>
+      <div class="msg-list" id="msg-list">
+        <div class="scroll-hint">Loading messages...</div>
+      </div>
+    </div>
+
+    <!-- COMPARISON (shown after pipeline) -->
+    <div class="compare" id="compare">
+      <div class="compare-header">
+        <span style="font-size:13px;font-weight:700">📊 Before vs After Compaction</span>
+        <span class="reduction-badge" id="reduction-badge"></span>
+      </div>
+      <div class="compare-grid">
+        <div class="compare-side">
+          <div class="compare-title" style="color:var(--red)">Before — 23 messages</div>
+          <div class="compare-stat"><span class="stat-key">Total tokens</span><span class="stat-val" style="color:var(--red)" id="before-tokens"></span></div>
+          <div class="compare-stat"><span class="stat-key">Zone C messages</span><span class="stat-val" id="before-c">14 messages</span></div>
+          <div class="compare-stat"><span class="stat-key">Zone B messages</span><span class="stat-val" id="before-b">4 messages</span></div>
+          <div class="compare-stat"><span class="stat-key">Zone A messages</span><span class="stat-val">5 messages</span></div>
+          <div class="compare-msgs" id="before-msgs"></div>
+        </div>
+        <div class="compare-side">
+          <div class="compare-title" style="color:var(--green)">After — compacted buffer</div>
+          <div class="compare-stat"><span class="stat-key">Total tokens</span><span class="stat-val" style="color:var(--green)" id="after-tokens"></span></div>
+          <div class="compare-stat"><span class="stat-key">Zone C → summary</span><span class="stat-val" style="color:var(--green)">1 message</span></div>
+          <div class="compare-stat"><span class="stat-key">Zone B (tool calls compressed)</span><span class="stat-val" style="color:var(--green)" id="after-b">4 messages</span></div>
+          <div class="compare-stat"><span class="stat-key">Zone A (unchanged)</span><span class="stat-val">5 messages</span></div>
+          <div class="compare-msgs" id="after-msgs"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: PIPELINE STEPS -->
+  <div>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Compaction Pipeline</span>
+        <span id="pipeline-status" style="font-size:11px;color:var(--t2)">Ready</span>
+      </div>
+      <div class="pipeline-steps">
+
+        <div id="s0" class="step">
+          <div class="step-header">
+            <div class="step-num">!</div>
+            <div class="step-name">Threshold Hit</div>
+            <span class="step-status s-waiting" id="s0-status">waiting</span>
+          </div>
+          <div class="step-detail" id="s0-detail"></div>
+        </div>
+
+        <div id="s1" class="step">
+          <div class="step-header">
+            <div class="step-num">1</div>
+            <div class="step-name">Message Segmenter</div>
+            <span class="step-status s-waiting" id="s1-status">waiting</span>
+          </div>
+          <div class="step-detail" id="s1-detail"></div>
+        </div>
+
+        <div id="s2" class="step">
+          <div class="step-header">
+            <div class="step-num">2</div>
+            <div class="step-name">Tool Call Formatter</div>
+            <span class="step-status s-waiting" id="s2-status">waiting</span>
+          </div>
+          <div class="step-detail" id="s2-detail"></div>
+        </div>
+
+        <div id="s3" class="step">
+          <div class="step-header">
+            <div class="step-num">3</div>
+            <div class="step-name">Compaction LLM</div>
+            <span class="step-status s-waiting" id="s3-status">waiting</span>
+          </div>
+          <div class="step-detail" id="s3-detail"></div>
+          <div class="llm-output" id="llm-output"></div>
+        </div>
+
+        <div id="s4" class="step">
+          <div class="step-header">
+            <div class="step-num">4</div>
+            <div class="step-name">Context Assembler</div>
+            <span class="step-status s-waiting" id="s4-status">waiting</span>
+          </div>
+          <div class="step-detail" id="s4-detail"></div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary pulsing" id="run-btn" onclick="runPipeline()">▶ Trigger Compaction</button>
+          <button class="btn btn-ghost" id="reset-btn" onclick="resetSim()" style="display:none">↺ Reset</button>
+        </div>
+
+        <!-- Live log -->
+        <div style="margin-top:14px;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:10px;max-height:140px;overflow-y:auto" id="log-box">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">Pipeline Log</div>
+          <div id="log-lines" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2);line-height:1.8"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end layout -->
+</div><!-- end page -->
+
+<script>
+// ── MOCK DATA ──────────────────────────────────────────────────────────────────
+const MESSAGES = [
+  // ── CONVERSATION 1: Build a scraper ─────────────────────────────────────────
+  {id:0, role:'system',      tokens:48,  short:'You are a Python expert assistant…',
+   full:'You are a Python expert assistant. Help users write clean, production-ready code.'},
+
+  {id:1, role:'human',       tokens:24,  short:'Help me build a web scraper for news articles',
+   full:'Help me build a web scraper for news articles. I want to extract title, author, date, and body.'},
+
+  {id:2, role:'ai',          tokens:112, short:'Great! Let me search for the best Python scraping libraries…',
+   full:"Great! Let me search for best practices and libraries for you."},
+
+  {id:3, role:'tool-call',   tokens:38,  short:'web_search("python news scraping best practices 2024")',
+   full:'web_search(query="python news scraping best practices 2024")',
+   tool:'web_search', inp:'query="python news scraping best practices 2024"'},
+
+  {id:4, role:'tool-result', tokens:724, short:'{"results": [{"title":"httpx vs requests…","url":…}, … +18 more]}',
+   full:'{"results":[{"title":"httpx vs requests for async scraping","url":"blog.example.com/httpx","snippet":"httpx supports async and HTTP/2 natively…"},{"title":"BeautifulSoup4 tutorial","url":"bs4docs.io","snippet":"bs4 remains the most popular HTML parser…"},{"title":"Playwright for JS-rendered pages","url":"playwright.dev","snippet":"Use Playwright when target has JavaScript…"},{"title":"Rate limiting strategies","url":"scraperapi.com/blog","snippet":"Always respect robots.txt and add delays…"}]}',
+   tool:'web_search', out:'20 results · top: httpx, BeautifulSoup4, Playwright'},
+
+  {id:5, role:'ai',          tokens:198, short:'Based on results: use httpx + BeautifulSoup4. Here\'s a starter…',
+   full:"Based on the results, I recommend httpx (async) + BeautifulSoup4. Here's a starter:\n\n```python\nimport httpx\nfrom bs4 import BeautifulSoup\n\nasync def scrape_article(url):\n    async with httpx.AsyncClient() as client:\n        r = await client.get(url)\n    soup = BeautifulSoup(r.text, 'html.parser')\n    return {'title': soup.h1.text, 'body': soup.find('article').text}\n```"},
+
+  // ── CONVERSATION 2: Add pagination ──────────────────────────────────────────
+  {id:6, role:'human',       tokens:22,  short:'Can you also handle pagination? Sites have multiple pages',
+   full:'Can you also handle pagination? Most news sites have multiple pages of articles.'},
+
+  {id:7, role:'ai',          tokens:96,  short:'Absolutely! Let me read your current scraper file…',
+   full:"Absolutely! Let me check the current scraper and add pagination support."},
+
+  {id:8, role:'tool-call',   tokens:30,  short:'read_file("scraper.py")',
+   full:'read_file(path="scraper.py")',
+   tool:'read_file', inp:'path="scraper.py"'},
+
+  {id:9, role:'tool-result', tokens:542, short:'"""\\nimport httpx\\nfrom bs4 import BeautifulSoup\\n… 58 lines …"""',
+   full:'import httpx\nfrom bs4 import BeautifulSoup\nimport asyncio\n\nBASE_URL = "https://news.example.com"\n\nasync def scrape_article(url):\n    async with httpx.AsyncClient(timeout=30) as client:\n        resp = await client.get(url)\n        resp.raise_for_status()\n    soup = BeautifulSoup(resp.text, "html.parser")\n    return {\n        "title": soup.find("h1", class_="article-title").text.strip(),\n        "author": soup.find("span", class_="byline").text.strip(),\n        "date": soup.find("time")["datetime"],\n        "body": " ".join(p.text for p in soup.find("div",class_="article-body").find_all("p"))\n    }\n\nasync def main():\n    urls = await get_article_urls()\n    results = await asyncio.gather(*[scrape_article(u) for u in urls])\n    return results',
+   tool:'read_file', out:'58-line scraper · httpx + BeautifulSoup · scrape_article() + main()'},
+
+  {id:10, role:'ai',         tokens:224, short:'Here\'s the paginated version with async page fetching…',
+   full:"Here's the paginated version:\n\n```python\nasync def get_all_pages(base_url, max_pages=10):\n    articles = []\n    for page in range(1, max_pages + 1):\n        url = f'{base_url}?page={page}'\n        page_articles = await scrape_page(url)\n        if not page_articles:\n            break  # no more pages\n        articles.extend(page_articles)\n    return articles\n```"},
+
+  {id:11, role:'tool-call',  tokens:42,  short:'execute_code("python scraper.py --pages 3")',
+   full:'execute_code(cmd="python scraper.py --pages 3", timeout=60)',
+   tool:'execute_code', inp:'cmd="python scraper.py --pages 3"'},
+
+  {id:12, role:'tool-result',tokens:368, short:'Scraped 3 pages: 45 articles total. Page 1: 15, Page 2: 15, Page 3: 15. Elapsed: 4.2s',
+   full:'stdout:\nScraping page 1... 15 articles\nScraping page 2... 15 articles\nScraping page 3... 15 articles\nTotal: 45 articles scraped in 4.2s\nSaved to articles.json\n\nstderr: (none)\nreturn_code: 0',
+   tool:'execute_code', out:'45 articles scraped · 3 pages · 4.2s · return_code: 0'},
+
+  {id:13, role:'ai',         tokens:88,  short:'Working perfectly! 45 articles across 3 pages in 4.2s.',
+   full:'Working perfectly! 45 articles across 3 pages in 4.2s. The pagination logic stops automatically when an empty page is returned.'},
+
+  // ── CONVERSATION 3: Error handling ──────────────────────────────────────────
+  {id:14, role:'human',      tokens:20,  short:'Now add proper error handling for network failures',
+   full:'Now add proper error handling for network failures, timeouts, and missing HTML elements.'},
+
+  {id:15, role:'ai',         tokens:84,  short:'Good call. Let me read the latest version first…',
+   full:"Good call — production scrapers need solid error handling. Let me read the current code."},
+
+  {id:16, role:'tool-call',  tokens:32,  short:'read_file("scraper_v2.py")',
+   full:'read_file(path="scraper_v2.py")',
+   tool:'read_file', inp:'path="scraper_v2.py"'},
+
+  {id:17, role:'tool-result',tokens:510, short:'"""… 72-line scraper with pagination …"""',
+   full:'import httpx\nfrom bs4 import BeautifulSoup\nimport asyncio\nimport json\n\nasync def scrape_page(base_url, page):\n    url = f"{base_url}?page={page}"\n    async with httpx.AsyncClient(timeout=30) as client:\n        resp = await client.get(url)\n    soup = BeautifulSoup(resp.text, "html.parser")\n    articles = []\n    for item in soup.find_all("article"):\n        articles.append({"title": item.h2.text, "url": item.a["href"]})\n    return articles\n\nasync def get_all_pages(base_url, max_pages=10):\n    results = []\n    for p in range(1, max_pages+1):\n        page = await scrape_page(base_url, p)\n        if not page: break\n        results.extend(page)\n    return results',
+   tool:'read_file', out:'72-line scraper_v2.py · added pagination · get_all_pages()'},
+
+  {id:18, role:'ai',         tokens:196, short:'Added try/except for httpx.TimeoutException, ConnectError, missing elements…',
+   full:"Added comprehensive error handling:\n\n```python\nasync def scrape_article_safe(url, retries=3):\n    for attempt in range(retries):\n        try:\n            async with httpx.AsyncClient(timeout=15) as c:\n                r = await c.get(url)\n                r.raise_for_status()\n            soup = BeautifulSoup(r.text, 'html.parser')\n            return parse_article(soup)\n        except httpx.TimeoutException:\n            if attempt == retries-1: return None\n            await asyncio.sleep(2**attempt)\n        except httpx.HTTPStatusError as e:\n            logger.error(f'HTTP {e.response.status_code}')\n            return None\n```"},
+
+  // ── CONVERSATION 4: Rate limiting (LAST USER QUERY = zone boundary) ─────────
+  {id:19, role:'human',      tokens:22,  short:'What about rate limiting? Don\'t want to get IP-banned',
+   full:"What about rate limiting? I don't want to get IP-banned. How do I add delays and respect robots.txt?"},
+
+  {id:20, role:'ai',         tokens:90,  short:'Important! Let me search for rate-limiting patterns…',
+   full:"Very important for production scrapers. Let me look up best practices for polite scraping."},
+
+  {id:21, role:'tool-call',  tokens:34,  short:'web_search("python scraper rate limiting robots.txt asyncio")',
+   full:'web_search(query="python scraper rate limiting robots.txt asyncio semaphore")',
+   tool:'web_search', inp:'query="python scraper rate limiting robots.txt asyncio"'},
+
+  {id:22, role:'tool-result',tokens:648, short:'{"results":[{"title":"Polite scraping with asyncio.Semaphore","url":…}, … +12 more]}',
+   full:'{"results":[{"title":"Polite scraping with asyncio.Semaphore","url":"realpython.com/async-scraping","snippet":"Use asyncio.Semaphore(5) to limit concurrent requests to 5 at once…"},{"title":"Scrapy rate limiting docs","url":"docs.scrapy.org/throttle","snippet":"AUTOTHROTTLE_ENABLED=True adapts delay based on server response times…"},{"title":"Respecting robots.txt in Python","url":"robotparser.io","snippet":"Use urllib.robotparser.RobotFileParser to check /robots.txt before scraping…"},{"title":"Token bucket rate limiter","url":"alexisrobert.net/blog/token-bucket","snippet":"Implement a token bucket for smooth request distribution…"},{"title":"httpx AsyncClient with rate limits","url":"www.python-httpx.org","snippet":"Use a Semaphore with AsyncClient for concurrency control…"}]}',
+   tool:'web_search', out:'13 results · asyncio.Semaphore, AUTOTHROTTLE, robots.txt, token bucket'},
+];
+
+// Model config
+const MODEL_LIMIT = 7500;   // demo limit (represents 200k scaled)
+const THRESHOLD  = 0.80;
+const ZONE_A_SIZE = 5;
+
+// Calculate cumulative tokens
+let totalTokens = MESSAGES.reduce((s,m) => s+m.tokens, 0);
+
+// Find last human message index (id:19 is the last user query = "rate limiting")
+const LAST_HUMAN_IDX = 19;
+const ZONE_A_START   = MESSAGES.length - ZONE_A_SIZE; // 18
+// Zone C: ids 0..18  Zone B: ids 19..17  Zone A: ids 18..22
+// Actually: Zone C = 0..LAST_HUMAN_IDX-1 = 0..18
+//           Zone B = LAST_HUMAN_IDX..ZONE_A_START-1 = 19..17?
+// Let me recalculate: last 5 messages = ids 18,19,20,21,22
+// Zone A = ids 18-22 (last 5)
+// Zone B = from last human msg BEFORE zone_a start = id 14 ("Now add error handling")
+// Let me find last human msg before zone A
+// Zone A starts at index 18 → messages[18] = id:18 (ai message)
+// Last human before zone_a: scan backwards from index 17 → find human → id:14 at index 14
+// Zone B = 14..17 (4 messages)
+// Zone C = 0..13 (14 messages)
+
+const ZONE_C_END   = 14;   // exclusive — messages[0..13] are Zone C
+const ZONE_B_START = 14;   // messages[14..17] are Zone B
+const ZONE_B_END   = 18;   // exclusive
+const ZONE_A_IDX   = 18;   // messages[18..22] are Zone A
+
+// Tool call pairs in Zone B
+const ZONE_B_TOOL_PAIRS = [
+  {callIdx:16, resultIdx:17}
+];
+const ZONE_C_TOOL_PAIRS = [
+  {callIdx:3, resultIdx:4},
+  {callIdx:8, resultIdx:9},
+  {callIdx:11, resultIdx:12},
+];
+
+// ── STATE ──────────────────────────────────────────────────────────────────────
+let pipelineRunning = false;
+let pipelineDone    = false;
+
+// ── INIT ───────────────────────────────────────────────────────────────────────
+function init() {
+  renderMessages();
+  updateMeter(totalTokens);
+  document.getElementById('msg-count').textContent = MESSAGES.length + ' messages';
+}
+
+// ── RENDER MESSAGES ────────────────────────────────────────────────────────────
+function renderMessages(opts={}) {
+  const list = document.getElementById('msg-list');
+  list.innerHTML = '';
+
+  MESSAGES.forEach((msg, i) => {
+    // Insert zone dividers
+    if (opts.showZones) {
+      if (i === ZONE_B_START) {
+        list.appendChild(divider('zd-c', '↑ Zone C — Full Compaction (14 msgs)'));
+        list.appendChild(divider('zd-b', '↓ Zone B — High Fidelity (last user query starts here)'));
+      }
+      if (i === ZONE_A_IDX) {
+        list.appendChild(divider('zd-b', '↑ Zone B end'));
+        list.appendChild(divider('zd-a', '↓ Zone A — Preserved (last 5 messages)'));
+      }
+    }
+
+    const el = document.createElement('div');
+    el.className = 'msg msg-' + msgClass(msg.role);
+    el.id = 'msg-' + i;
+
+    let zoneClass = '';
+    let isToolCompressed = false;
+    if (opts.showZones) {
+      if (i < ZONE_C_END)                        zoneClass = 'zone-c-hl';
+      else if (i >= ZONE_B_START && i < ZONE_A_IDX) zoneClass = 'zone-b-hl';
+      else                                         zoneClass = 'zone-a-hl';
+    }
+    if (opts.compressTools && isZoneBTool(i)) {
+      isToolCompressed = true;
+    }
+    if (opts.hideZoneC && i < ZONE_C_END) {
+      zoneClass += ' zone-compressed';
+    }
+    el.classList.add(zoneClass);
+    if (isToolCompressed) el.classList.add('zone-tool-compressed');
+
+    const roleLabel = roleMap(msg.role);
+    let content = msg.short;
+    if (isToolCompressed) {
+      content = `[${msg.tool}] ${msg.inp || msg.out} → ${msg.out || ''}`;
+    }
+
+    el.innerHTML = `
+      <div class="msg-role">${roleLabel}</div>
+      <div class="msg-content">${escHtml(content)}</div>
+      <div class="msg-tokens">${msg.tokens} tokens</div>`;
+    list.appendChild(el);
+  });
+
+  // If showing assembled state, insert summary + show modified buffer
+  if (opts.assembled) {
+    list.innerHTML = '';
+    // Summary message
+    const sumEl = document.createElement('div');
+    sumEl.className = 'msg msg-summary';
+    sumEl.innerHTML = `
+      <div class="msg-role">⚡ SYSTEM · Context Summary (Zone C compacted)</div>
+      <div class="msg-content">${escHtml(SUMMARY_TEXT)}</div>
+      <div class="msg-tokens">~420 tokens (was 3,202 tokens across 14 messages)</div>`;
+    list.appendChild(sumEl);
+
+    dividerEl('zd-b', '↓ Zone B — 4 messages (tool calls compressed)').forEach(e=>list.appendChild(e));
+
+    // Zone B — with compressed tools
+    for (let i = ZONE_B_START; i < ZONE_A_IDX; i++) {
+      const msg = MESSAGES[i];
+      const el = document.createElement('div');
+      const isTC = isZoneBTool(i);
+      el.className = 'msg zone-b-hl ' + (isTC ? 'zone-tool-compressed' : ('msg-'+msgClass(msg.role)));
+      let content = isTC
+        ? `[${msg.tool}] ${msg.inp} → ${msg.out}`
+        : msg.short;
+      el.innerHTML = `
+        <div class="msg-role">${isTC ? '🗜️ COMPRESSED TOOL' : roleMap(msg.role)}</div>
+        <div class="msg-content">${escHtml(content)}</div>
+        <div class="msg-tokens">${isTC ? '~18 tokens (was '+msg.tokens+')' : msg.tokens+' tokens'}</div>`;
+      list.appendChild(el);
+    }
+
+    dividerEl('zd-a', '↓ Zone A — 5 messages (unchanged)').forEach(e=>list.appendChild(e));
+
+    // Zone A — unchanged
+    for (let i = ZONE_A_IDX; i < MESSAGES.length; i++) {
+      const msg = MESSAGES[i];
+      const el = document.createElement('div');
+      el.className = 'msg zone-a-hl msg-'+msgClass(msg.role);
+      el.innerHTML = `
+        <div class="msg-role">${roleMap(msg.role)}</div>
+        <div class="msg-content">${escHtml(msg.short)}</div>
+        <div class="msg-tokens">${msg.tokens} tokens</div>`;
+      list.appendChild(el);
+    }
+
+    setTimeout(() => list.scrollTo({top:0, behavior:'smooth'}), 100);
+  }
+}
+
+function divider(cls, text) {
+  const d = document.createElement('div');
+  d.className = 'zone-divider visible ' + cls;
+  d.textContent = '── ' + text + ' ──';
+  return d;
+}
+function dividerEl(cls, text) { return [divider(cls, text)]; }
+
+function isZoneBTool(i) {
+  return ZONE_B_TOOL_PAIRS.some(p => p.callIdx===i || p.resultIdx===i);
+}
+
+// ── METER ──────────────────────────────────────────────────────────────────────
+function updateMeter(tokens, color) {
+  const pct = Math.min(tokens / MODEL_LIMIT * 100, 100);
+  const fill = document.getElementById('meter-fill');
+  const display = document.getElementById('token-display');
+  const c = color || (pct >= 95 ? '#f85149' : pct >= 80 ? '#f78166' : pct >= 70 ? '#e3b341' : '#3fb950');
+  fill.style.width = pct.toFixed(1) + '%';
+  fill.style.background = `linear-gradient(to right, ${c}99, ${c})`;
+  display.textContent = tokens.toLocaleString() + ' / ' + MODEL_LIMIT.toLocaleString() + ' tokens  (' + pct.toFixed(1) + '%)';
+  display.style.color = c;
+}
+
+// ── LOG ────────────────────────────────────────────────────────────────────────
+function log(msg, color) {
+  const box = document.getElementById('log-lines');
+  const now = new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const line = document.createElement('div');
+  line.innerHTML = `<span style="color:var(--t3)">[${now}]</span> <span style="color:${color||'var(--t2)'}">${msg}</span>`;
+  box.appendChild(line);
+  box.parentElement.scrollTop = box.parentElement.scrollHeight;
+}
+
+// ── STEP HELPERS ───────────────────────────────────────────────────────────────
+function setStep(n, state, detailHTML) {
+  const step = document.getElementById('s'+n);
+  const statusEl = document.getElementById('s'+n+'-status');
+  step.classList.remove('active','done');
+  statusEl.className = 'step-status';
+  if (state === 'running') {
+    step.classList.add('active');
+    statusEl.classList.add('s-running');
+    statusEl.innerHTML = '<span class="spinner"></span> running';
+  } else if (state === 'done') {
+    step.classList.add('done');
+    statusEl.classList.add('s-done');
+    statusEl.textContent = '✓ done';
+  } else {
+    statusEl.classList.add('s-waiting');
+    statusEl.textContent = 'waiting';
+  }
+  if (detailHTML !== undefined) {
+    document.getElementById('s'+n+'-detail').innerHTML = detailHTML;
+  }
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── MOCK SUMMARY ───────────────────────────────────────────────────────────────
+const SUMMARY_TEXT = `## Conversation Summary (Zone C — 14 messages compacted)
+
+**User Goal:** Build a production Python news article web scraper
+
+**Key Decisions:**
+• Library stack: httpx (async) + BeautifulSoup4 — chosen over requests/Scrapy
+• Async pattern: httpx.AsyncClient with asyncio.gather() for concurrent scraping
+• File: scraper.py → scraper_v2.py (with pagination)
+
+**Code Written:**
+• scrape_article(url) — extracts title, author, date, body from HTML
+• get_all_pages(base_url, max_pages=10) — auto-stops on empty page
+• scrape_article_safe(url, retries=3) — exponential backoff on timeout
+
+**Test Results:**
+• Ran scraper.py --pages 3 → 45 articles scraped in 4.2s ✓
+• Pagination confirmed working (stops when empty page returned)
+
+**Errors / Issues:** None so far
+
+**Current State:** scraper_v2.py · 72 lines · pagination + basic error handling added`;
+
+// ── MAIN PIPELINE ──────────────────────────────────────────────────────────────
+async function runPipeline() {
+  if (pipelineRunning) return;
+  pipelineRunning = true;
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('run-btn').classList.remove('pulsing');
+  document.getElementById('pipeline-status').textContent = 'Running...';
+  document.getElementById('pipeline-status').style.color = 'var(--yellow)';
+
+  // ── STEP 0: Threshold hit ───────────────────────────────────────────────────
+  setStep(0, 'running', `
+    Token counter evaluated buffer: <code>${totalTokens.toLocaleString()} / ${MODEL_LIMIT.toLocaleString()} tokens</code><br>
+    Usage ratio: <code>${(totalTokens/MODEL_LIMIT*100).toFixed(1)}%</code> — exceeds <code>80%</code> hard threshold<br>
+    <strong style="color:var(--orange)">→ Blocking compaction triggered</strong>`);
+  log('Threshold check: ' + totalTokens + ' / ' + MODEL_LIMIT + ' tokens (' + (totalTokens/MODEL_LIMIT*100).toFixed(1) + '%)', 'var(--orange)');
+  updateMeter(totalTokens, '#f78166');
+  await delay(1200);
+  setStep(0, 'done');
+  log('▶ Starting Compaction Pipeline', 'var(--blue)');
+
+  // ── STEP 1: Segmenter ───────────────────────────────────────────────────────
+  setStep(1, 'running', `
+    Scanning buffer for last human message before <code>zone_a_size=5</code> tail...<br>
+    Found last user query at <code>index 14</code>: <em>"Now add error handling…"</em><br>
+    <span style="color:var(--zone-c)">▪ Zone C</span>: messages 0–13 (<strong>14 messages</strong>, 3,202 tokens)<br>
+    <span style="color:#a371f7">▪ Zone B</span>: messages 14–17 (<strong>4 messages</strong>, 812 tokens)<br>
+    <span style="color:var(--green)">▪ Zone A</span>: messages 18–22 (<strong>5 messages</strong>, 974 tokens)`);
+  await delay(400);
+  renderMessages({showZones: true});
+  log('Segmenter → Zone C: 14 msgs, Zone B: 4 msgs, Zone A: 5 msgs', 'var(--t2)');
+  await delay(1400);
+  setStep(1, 'done');
+
+  // ── STEP 2: Tool Formatter ──────────────────────────────────────────────────
+  setStep(2, 'running', `
+    Scanning <span style="color:#a371f7">Zone B</span> for tool call / result pairs...<br>
+    Found <strong>1 pair</strong>: <code>read_file("scraper_v2.py")</code> + result<br>
+    Compressing: <code>1,042 tokens → ~18 tokens</code> (98.3% reduction)<br>
+    Output: <code>[read_file] path="scraper_v2.py" → 72-line scraper_v2.py</code>`);
+  await delay(400);
+  renderMessages({showZones: true, compressTools: true});
+  log('Tool Formatter → compressed 1 pair in Zone B: 542 tokens saved', 'var(--t2)');
+  await delay(1300);
+  setStep(2, 'done');
+
+  // ── STEP 3: Compaction LLM ──────────────────────────────────────────────────
+  setStep(3, 'running', `
+    Sending <strong>Zone C</strong> (14 messages, 3,202 tokens) to compaction model<br>
+    Model: <code>claude-haiku-4-5</code> (cheap + fast)<br>
+    Generating dense summary…`);
+  document.getElementById('llm-output').style.display = 'none';
+  log('Sending Zone C to claude-haiku-4-5 for summarization…', 'var(--t2)');
+  await delay(600);
+  renderMessages({showZones: true, compressTools: true, hideZoneC: true});
+  await delay(400);
+
+  // Typewriter effect for LLM output
+  const llmOut = document.getElementById('llm-output');
+  llmOut.classList.add('visible');
+  llmOut.style.display = 'block';
+  let typed = '';
+  for (const char of SUMMARY_TEXT) {
+    typed += char;
+    llmOut.textContent = typed;
+    llmOut.scrollTop = llmOut.scrollHeight;
+    await delay(char === '\n' ? 12 : 4);
+  }
+  log('Compaction LLM → summary generated: 3,202 tokens → 420 tokens (86.9% reduction)', 'var(--green)');
+  setStep(3, 'done', `
+    <span style="color:var(--green)">✓</span> Summary generated by <code>claude-haiku-4-5</code><br>
+    Input: <code>3,202 tokens</code> (14 messages) → Output: <code>~420 tokens</code> (1 summary message)<br>
+    <strong style="color:var(--green)">86.9% token reduction on Zone C</strong>`);
+  await delay(800);
+
+  // ── STEP 4: Assembler ───────────────────────────────────────────────────────
+  setStep(4, 'running', `
+    Assembling new buffer: <code>[summary_msg] + zone_b_compressed + zone_a_raw</code><br>
+    New buffer: <strong>10 messages</strong> (was 23)<br>
+    Recalculating token count…`);
+  log('Assembler → rebuilding buffer…', 'var(--t2)');
+  await delay(600);
+
+  // New token count
+  const zoneATokens = MESSAGES.slice(ZONE_A_IDX).reduce((s,m)=>s+m.tokens,0);
+  const zoneBCompressed = MESSAGES.slice(ZONE_B_START, ZONE_A_IDX)
+    .reduce((s,m) => s + (isZoneBTool(MESSAGES.indexOf(m)) ? 18 : m.tokens), 0);
+  const summaryTokens = 420;
+  const newTotal = summaryTokens + zoneBCompressed + zoneATokens;
+
+  renderMessages({assembled: true});
+  updateMeter(newTotal, '#3fb950');
+  document.getElementById('msg-count').textContent = '10 messages (was 23)';
+  document.getElementById('pipeline-status').textContent = 'Done ✓';
+  document.getElementById('pipeline-status').style.color = 'var(--green)';
+
+  setStep(4, 'done', `
+    <span style="color:var(--green)">✓</span> Buffer rebuilt: <strong>10 messages</strong> (was 23)<br>
+    New token count: <code>${newTotal.toLocaleString()} tokens</code> (was ${totalTokens.toLocaleString()})<br>
+    <strong style="color:var(--green)">Context usage: ${(newTotal/MODEL_LIMIT*100).toFixed(1)}% — well below threshold</strong>`);
+
+  log('Assembler → new buffer: 10 msgs, ' + newTotal + ' tokens (' + (newTotal/MODEL_LIMIT*100).toFixed(1) + '%)', 'var(--green)');
+  log('✓ Compaction complete. Ready for next LLM call.', 'var(--green)');
+
+  // Show comparison
+  showComparison(newTotal);
+  document.getElementById('reset-btn').style.display = '';
+  pipelineRunning = false;
+  pipelineDone = true;
+}
+
+// ── COMPARISON ─────────────────────────────────────────────────────────────────
+function showComparison(newTotal) {
+  document.getElementById('compare').classList.add('visible');
+  const reduction = ((1 - newTotal / totalTokens) * 100).toFixed(1);
+  document.getElementById('reduction-badge').textContent = '↓ ' + reduction + '% tokens';
+  document.getElementById('before-tokens').textContent = totalTokens.toLocaleString() + ' tokens';
+  document.getElementById('after-tokens').textContent = newTotal.toLocaleString() + ' tokens';
+
+  // Before messages
+  const beforeMsgs = document.getElementById('before-msgs');
+  beforeMsgs.innerHTML = '';
+  MESSAGES.forEach((m, i) => {
+    const el = document.createElement('div');
+    let zone = i < ZONE_C_END ? 'c' : i < ZONE_A_IDX ? 'b' : 'a';
+    let cls = zone === 'c' ? 'cm-system' : zone === 'b' ? 'cm-tool' : 'cm-ai';
+    const roles = {system:'SYS',human:'USR',ai:'AI','tool-call':'TOOL▸','tool-result':'◂RESULT'};
+    el.className = 'cm ' + cls;
+    el.innerHTML = `<div class="cm-label">${roles[m.role]} · ${m.tokens}t · Zone ${zone.toUpperCase()}</div>${escHtml(m.short.substring(0,60))}${m.short.length>60?'…':''}`;
+    beforeMsgs.appendChild(el);
+  });
+
+  // After messages
+  const afterMsgs = document.getElementById('after-msgs');
+  afterMsgs.innerHTML = '';
+  const sumEl = document.createElement('div');
+  sumEl.className = 'cm cm-summary';
+  sumEl.innerHTML = `<div class="cm-label">SYSTEM · ~420t · Zone C compacted</div>⚡ Context Summary (14 msgs → 1 summary)`;
+  afterMsgs.appendChild(sumEl);
+
+  for (let i = ZONE_B_START; i < ZONE_A_IDX; i++) {
+    const m = MESSAGES[i];
+    const el = document.createElement('div');
+    const isTC = isZoneBTool(i);
+    el.className = 'cm ' + (isTC ? 'cm-tool' : 'cm-ai');
+    const roles = {system:'SYS',human:'USR',ai:'AI','tool-call':'🗜️ COMPRESSED','tool-result':'🗜️ COMPRESSED'};
+    const t = isTC ? 18 : m.tokens;
+    const label = (roles[m.role]||m.role) + ' · ' + t + 't · Zone B';
+    el.innerHTML = `<div class="cm-label">${label}</div>${escHtml((isTC ? `[${m.tool}] ${m.inp} → ${m.out}` : m.short).substring(0,60))}…`;
+    afterMsgs.appendChild(el);
+  }
+
+  for (let i = ZONE_A_IDX; i < MESSAGES.length; i++) {
+    const m = MESSAGES[i];
+    const el = document.createElement('div');
+    el.className = 'cm cm-ai';
+    const roles = {system:'SYS',human:'USR',ai:'AI','tool-call':'TOOL▸','tool-result':'◂RESULT'};
+    el.innerHTML = `<div class="cm-label">${roles[m.role]} · ${m.tokens}t · Zone A (unchanged)</div>${escHtml(m.short.substring(0,60))}…`;
+    afterMsgs.appendChild(el);
+  }
+
+  setTimeout(() => {
+    document.getElementById('compare').scrollIntoView({behavior:'smooth', block:'start'});
+  }, 300);
+}
+
+// ── RESET ──────────────────────────────────────────────────────────────────────
+function resetSim() {
+  pipelineDone = false;
+  pipelineRunning = false;
+  [0,1,2,3,4].forEach(n => setStep(n, 'waiting', ''));
+  document.getElementById('llm-output').classList.remove('visible');
+  document.getElementById('llm-output').style.display = 'none';
+  document.getElementById('llm-output').textContent = '';
+  document.getElementById('log-lines').innerHTML = '';
+  document.getElementById('compare').classList.remove('visible');
+  document.getElementById('run-btn').disabled = false;
+  document.getElementById('run-btn').classList.add('pulsing');
+  document.getElementById('reset-btn').style.display = 'none';
+  document.getElementById('pipeline-status').textContent = 'Ready';
+  document.getElementById('pipeline-status').style.color = '';
+  document.getElementById('msg-count').textContent = MESSAGES.length + ' messages';
+  renderMessages();
+  updateMeter(totalTokens);
+  log('Simulator reset.', 'var(--t3)');
+}
+
+// ── HELPERS ────────────────────────────────────────────────────────────────────
+function msgClass(role) {
+  return {system:'system', human:'human', ai:'ai', 'tool-call':'tool-call', 'tool-result':'tool-result'}[role] || 'ai';
+}
+function roleMap(role) {
+  return {system:'⚙ SYSTEM',human:'👤 USER',ai:'🤖 AI','tool-call':'🔨 TOOL CALL','tool-result':'📦 TOOL RESULT'}[role] || role;
+}
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Start
+init();
+log('Simulator ready. Buffer loaded: 23 messages, ' + totalTokens + ' tokens (' + (totalTokens/MODEL_LIMIT*100).toFixed(1) + '% of ' + MODEL_LIMIT + ' limit)', 'var(--orange)');
+log('⚠ Threshold exceeded (>80%). Click "Trigger Compaction" to run the pipeline.', 'var(--yellow)');
+</script>
+</body>
+</html>
